@@ -373,6 +373,14 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [showGoTop, setShowGoTop] = useState(false);
 
+  // Info panel
+  const [showInfo, setShowInfo] = useState(false);
+  const infoRef = useRef<HTMLDivElement>(null);
+
+  // Page nav collapse
+  const [pageNavExpanded, setPageNavExpanded] = useState(false);
+  const PAGE_NAV_LIMIT = 20;
+
   // Merge mode
   const [mergedSections, setMergedSections] = useState<MergeSection[]>([]);
   const [mergeStatus, setMergeStatus] = useState<Status>("idle");
@@ -411,6 +419,7 @@ export default function Home() {
   useEffect(() => {
     function h(e: MouseEvent) {
       if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) setShowDownload(false);
+      if (infoRef.current && !infoRef.current.contains(e.target as Node)) setShowInfo(false);
     }
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -718,7 +727,7 @@ export default function Home() {
               {status === "success" && result && (
                 <div className="py-8 space-y-6">
 
-                  {/* ── Filename ── */}
+                  {/* ── Filename + Info icon ── */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <h2 className={`text-xl font-bold ${dark ? "text-white" : "text-gray-900"}`}>{result.filename}</h2>
                     {result.kind === "pdf" && (
@@ -726,6 +735,41 @@ export default function Home() {
                         {detectedLang}
                       </span>
                     )}
+
+                    {/* Info icon + dropdown */}
+                    {result.kind === "pdf" && (
+                      <div className="relative" ref={infoRef}>
+                        <button onClick={() => setShowInfo((v) => !v)} title="Document details"
+                          className={`p-1.5 rounded-lg transition-colors ${showInfo ? dark ? "bg-blue-900/40 text-blue-400" : "bg-blue-100 text-blue-600" : dark ? "text-gray-600 hover:text-gray-300 hover:bg-gray-800" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}>
+                          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                          </svg>
+                        </button>
+                        {showInfo && (
+                          <div className={`absolute left-0 top-full mt-2 w-72 rounded-xl border shadow-xl z-50 p-5 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                            <p className={`text-xs font-semibold uppercase tracking-wider mb-4 ${dark ? "text-gray-500" : "text-gray-400"}`}>Document Details</p>
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                              {([
+                                ["Pages", result.total_pages.toString()],
+                                ["Words", fmt(wordCount)],
+                                ["Characters", fmt(result.total_characters)],
+                                ["Lines", fmt(lineCount)],
+                                ["Reading time", readingMinutes < 1 ? "< 1 min" : `~${readingMinutes} min`],
+                                ["Extract time", `${result.extraction_time_seconds}s`],
+                                ["Language", detectedLang],
+                                ["OCR pages", result.pages.filter((p) => p.method === "ocr").length.toString()],
+                              ] as [string, string][]).map(([label, value]) => (
+                                <div key={label}>
+                                  <p className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
+                                  <p className={`text-sm font-semibold mt-0.5 ${dark ? "text-white" : "text-gray-900"}`}>{value}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {result.kind === "pdf" && bookmarkedPages.size > 0 && (
                       <div className="flex items-center gap-1.5 flex-wrap ml-auto">
                         <span className={`text-xs mr-1 ${dark ? "text-gray-600" : "text-gray-400"}`}>Bookmarks:</span>
@@ -739,34 +783,6 @@ export default function Home() {
                       </div>
                     )}
                   </div>
-
-                  {/* ── Summary cards ── */}
-                  {result.kind === "pdf" && (
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{result.total_pages}</p>
-                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Pages</p>
-                      </div>
-                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{fmt(result.total_characters)}</p>
-                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Characters</p>
-                      </div>
-                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{result.extraction_time_seconds}s</p>
-                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Extract Time</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Extra stats row ── */}
-                  {result.kind === "pdf" && (
-                    <div className={`flex items-center gap-6 text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>
-                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{fmt(wordCount)}</strong> words</span>
-                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{fmt(lineCount)}</strong> lines</span>
-                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>~{readingMinutes < 1 ? "< 1" : readingMinutes} min</strong> reading time</span>
-                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{result.pages.filter((p) => p.method === "ocr").length}</strong> OCR pages</span>
-                    </div>
-                  )}
 
                   {/* ── Search bar ── */}
                   {result.kind === "pdf" && (
@@ -941,27 +957,39 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* ── Page navigator ── */}
-                  {showPageNav && result.kind === "pdf" && (
-                    <div className={`flex flex-wrap gap-1.5 p-4 rounded-2xl border ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-                      {orderedPages.map((p) => {
-                        const inRange = p.page_number >= fromPage && p.page_number <= toPage;
-                        const isBookmarked = bookmarkedPages.has(p.page_number);
-                        return (
-                          <button key={p.page_number} onClick={() => scrollToPage(p.page_number)}
-                            className={`relative rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                              !inRange
-                                ? dark ? "text-gray-800 cursor-default" : "text-gray-300 cursor-default"
-                                : isBookmarked
-                                  ? dark ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                                  : dark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-blue-50"
-                            }`}>
-                            {p.page_number}
+                  {/* ── Page navigator (collapsible) ── */}
+                  {showPageNav && result.kind === "pdf" && (() => {
+                    const visiblePages = pageNavExpanded ? orderedPages : orderedPages.slice(0, PAGE_NAV_LIMIT);
+                    const hasMore = orderedPages.length > PAGE_NAV_LIMIT;
+                    return (
+                      <div className={`rounded-2xl border p-4 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                        <div className="flex flex-wrap gap-1.5">
+                          {visiblePages.map((p) => {
+                            const inRange = p.page_number >= fromPage && p.page_number <= toPage;
+                            const isBookmarked = bookmarkedPages.has(p.page_number);
+                            return (
+                              <button key={p.page_number} onClick={() => scrollToPage(p.page_number)}
+                                className={`relative rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                                  !inRange
+                                    ? dark ? "text-gray-800 cursor-default" : "text-gray-300 cursor-default"
+                                    : isBookmarked
+                                      ? dark ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                      : dark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-blue-50"
+                                }`}>
+                                {p.page_number}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {hasMore && (
+                          <button onClick={() => setPageNavExpanded((v) => !v)}
+                            className={`mt-3 text-xs font-medium transition-colors ${dark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"}`}>
+                            {pageNavExpanded ? "Show less" : `Show all ${orderedPages.length} pages`}
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* ── Stats / Redact panels ── */}
                   {(showStats || showRedact) && result.kind === "pdf" && (
