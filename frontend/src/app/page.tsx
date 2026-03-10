@@ -99,8 +99,8 @@ function highlightText(text: string, regex: RegExp | null, curIdx: number): Reac
     if (m.index > last) parts.push(text.slice(last, m.index));
     parts.push(
       <mark key={mc} className={mc === curIdx
-        ? "bg-orange-300 text-orange-900 rounded-sm px-0.5"
-        : "bg-yellow-200 text-yellow-900 rounded-sm px-0.5"}>
+        ? "bg-orange-400 text-white rounded px-0.5"
+        : "bg-yellow-200 text-yellow-900 rounded px-0.5"}>
         {m[0]}
       </mark>
     );
@@ -208,254 +208,6 @@ async function fetchExtract(file: File): Promise<ExtractResult> {
   return PDF_EXTS.includes(ext) ? { kind: "pdf", ...data } : { kind: "image", ...data };
 }
 
-// ─── Small atoms ─────────────────────────────────────────────────────────────
-
-function Sep() {
-  const dark = useContext(DarkCtx);
-  return <div className={`w-px h-4 mx-0.5 flex-shrink-0 ${dark ? "bg-gray-700" : "bg-gray-200"}`} />;
-}
-
-// Compact toolbar button — icon + optional label
-function TBtn({
-  onClick, active = false, title, children, disabled = false,
-}: {
-  onClick?: () => void; active?: boolean; title?: string;
-  children: React.ReactNode; disabled?: boolean;
-}) {
-  const dark = useContext(DarkCtx);
-  return (
-    <button onClick={onClick} disabled={disabled} title={title}
-      className={`inline-flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap disabled:opacity-40 ${
-        active
-          ? dark ? "bg-blue-900/40 text-blue-300" : "bg-blue-50 text-blue-700"
-          : dark ? "text-gray-400 hover:text-gray-100 hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
-      }`}>
-      {children}
-    </button>
-  );
-}
-
-// ─── DetailsPanel ─────────────────────────────────────────────────────────────
-
-function DetailsPanel({
-  result, wordCount, lineCount, readingMinutes, detectedLang, onClose,
-}: {
-  result: PdfResult; wordCount: number; lineCount: number;
-  readingMinutes: number; detectedLang: string; onClose: () => void;
-}) {
-  const dark = useContext(DarkCtx);
-  const ref = useRef<HTMLDivElement>(null);
-  const ocrPages = result.pages.filter((p) => p.method === "ocr").length;
-
-  useEffect(() => {
-    function h(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [onClose]);
-
-  return (
-    <div ref={ref}
-      className={`absolute top-full right-0 mt-2 w-72 rounded-xl border shadow-xl z-50 p-5 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-        {([
-          ["Pages", result.total_pages.toString()],
-          ["Words", fmt(wordCount)],
-          ["Lines", fmt(lineCount)],
-          ["Characters", fmt(result.total_characters)],
-          ["Reading time", readingMinutes < 1 ? "< 1 min" : `~${readingMinutes} min`],
-          ["Extract time", `${result.extraction_time_seconds}s`],
-          ["Language", detectedLang],
-          ["OCR pages", ocrPages.toString()],
-        ] as [string, string][]).map(([label, value]) => (
-          <div key={label}>
-            <p className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
-            <p className={`text-sm font-semibold mt-0.5 ${dark ? "text-white" : "text-gray-900"}`}>{value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── ViewOptionsMenu ──────────────────────────────────────────────────────────
-
-function ViewOptionsMenu({
-  showPageNav, onTogglePageNav,
-  onExpandAll, onCollapseAll,
-  fromPage, toPage, totalPages,
-  onFromChange, onToChange,
-  showStats, onToggleStats,
-  showRedact, onToggleRedact,
-}: {
-  showPageNav: boolean; onTogglePageNav: () => void;
-  onExpandAll: () => void; onCollapseAll: () => void;
-  fromPage: number; toPage: number; totalPages: number;
-  onFromChange: (v: number) => void; onToChange: (v: number) => void;
-  showStats: boolean; onToggleStats: () => void;
-  showRedact: boolean; onToggleRedact: () => void;
-}) {
-  const dark = useContext(DarkCtx);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function h(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const menuBg = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
-  const itemCls = dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-50";
-  const inputCls = dark ? "bg-gray-700 border-gray-600 text-gray-200" : "bg-white border-gray-300 text-gray-800";
-
-  return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-          open
-            ? dark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-100 border-gray-300 text-gray-900"
-            : dark ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-        }`}>
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-        </svg>
-        View Options
-        <svg className="w-3 h-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-      </button>
-
-      {open && (
-        <div className={`absolute right-0 top-full mt-1 w-52 rounded-xl border shadow-xl z-40 overflow-hidden ${menuBg}`}>
-          <div className="p-1">
-            <button onClick={() => { onExpandAll(); setOpen(false); }}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
-              Expand All
-            </button>
-            <button onClick={() => { onCollapseAll(); setOpen(false); }}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" /></svg>
-              Collapse All
-            </button>
-          </div>
-          <div className={`border-t ${dark ? "border-gray-700" : "border-gray-100"} p-1`}>
-            <button onClick={() => { onTogglePageNav(); setOpen(false); }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-              <span className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" /></svg>
-                Page Navigator
-              </span>
-              {showPageNav && <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
-            </button>
-          </div>
-          <div className={`border-t ${dark ? "border-gray-700" : "border-gray-100"} px-3 py-2`}>
-            <p className={`text-xs mb-2 ${dark ? "text-gray-500" : "text-gray-400"}`}>Page range</p>
-            <div className="flex items-center gap-2">
-              <input type="number" min={1} max={totalPages} value={fromPage}
-                onChange={(e) => onFromChange(Math.max(1, Math.min(+e.target.value, toPage)))}
-                className={`w-16 rounded-md border px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500 ${inputCls}`} />
-              <span className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>–</span>
-              <input type="number" min={fromPage} max={totalPages} value={toPage}
-                onChange={(e) => onToChange(Math.max(fromPage, Math.min(+e.target.value, totalPages)))}
-                className={`w-16 rounded-md border px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-500 ${inputCls}`} />
-            </div>
-          </div>
-          <div className={`border-t ${dark ? "border-gray-700" : "border-gray-100"} p-1`}>
-            <button onClick={() => { onToggleStats(); setOpen(false); }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-              <span className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
-                Text Statistics
-              </span>
-              {showStats && <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
-            </button>
-            <button onClick={() => { onToggleRedact(); setOpen(false); }}
-              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-              <span className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
-                Redact Terms
-              </span>
-              {showRedact && <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── DownloadMenu ─────────────────────────────────────────────────────────────
-
-function DownloadMenu({ result, pages, getEff, onCopyMarkdown }: {
-  result: ExtractResult; pages: Page[]; getEff: (p: Page) => string; onCopyMarkdown: () => void;
-}) {
-  const dark = useContext(DarkCtx);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const base = result.filename.replace(/\.[^.]+$/, "");
-
-  useEffect(() => {
-    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const opts = result.kind === "pdf" ? [
-    { label: "Plain text (.txt)", ext: "txt", mime: "text/plain", build: () => buildTxt(pages, getEff) },
-    { label: "JSON (.json)", ext: "json", mime: "application/json", build: () => buildJson(result, pages, getEff) },
-    { label: "Markdown (.md)", ext: "md", mime: "text/markdown", build: () => buildMd(result.filename, pages, getEff) },
-  ] : [
-    { label: "Plain text (.txt)", ext: "txt", mime: "text/plain", build: () => (result as ImageResult).text },
-  ];
-
-  const menuBg = dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
-  const itemCls = dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-50";
-
-  return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-          open
-            ? dark ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-100 border-gray-300 text-gray-900"
-            : dark ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-        }`}>
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-        </svg>
-        Download
-        <svg className="w-3 h-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-      </button>
-      {open && (
-        <div className={`absolute left-0 top-full mt-1 w-48 rounded-xl border shadow-xl z-40 overflow-hidden ${menuBg}`}>
-          <div className="p-1">
-            {opts.map((o) => (
-              <button key={o.ext}
-                onClick={() => { triggerDownload(o.build(), `${base}.${o.ext}`, o.mime); setOpen(false); }}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-                <span className={`w-8 text-center rounded font-mono text-xs font-semibold py-0.5 ${dark ? "bg-gray-700 text-gray-400" : "bg-gray-100 text-gray-500"}`}>.{o.ext}</span>
-                {o.label.split("(")[0].trim()}
-              </button>
-            ))}
-            {result.kind === "pdf" && (
-              <>
-                <div className={`my-1 border-t ${dark ? "border-gray-700" : "border-gray-100"}`} />
-                <button onClick={() => { onCopyMarkdown(); setOpen(false); }}
-                  className={`flex w-full items-center gap-2.5 px-3 py-2 text-xs rounded-lg transition-colors ${itemCls}`}>
-                  <span className={`w-8 text-center rounded font-mono text-xs font-semibold py-0.5 ${dark ? "bg-gray-700 text-gray-400" : "bg-gray-100 text-gray-500"}`}>MD</span>
-                  Copy as Markdown
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── StatsPanel ───────────────────────────────────────────────────────────────
 
 function StatsPanel({ pages, text }: { pages: Page[]; text: string }) {
@@ -467,14 +219,15 @@ function StatsPanel({ pages, text }: { pages: Page[]; text: string }) {
   const sorted = [...pages].sort((a, b) => a.character_count - b.character_count);
 
   return (
-    <div className={`rounded-xl border p-5 space-y-5 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+    <div className={`rounded-2xl border p-6 space-y-5 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+      <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Text Statistics</h3>
       <div className="grid grid-cols-3 gap-4">
         {[
           { l: "Avg words / page", v: fmt(avgWords) },
           { l: "Shortest page", v: sorted[0] ? `Page ${sorted[0].page_number}` : "—" },
           { l: "Longest page", v: sorted[sorted.length - 1] ? `Page ${sorted[sorted.length - 1].page_number}` : "—" },
         ].map(({ l, v }) => (
-          <div key={l}>
+          <div key={l} className={`rounded-xl p-3 ${dark ? "bg-gray-700/50" : "bg-gray-50"}`}>
             <p className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{l}</p>
             <p className={`text-sm font-semibold mt-0.5 ${dark ? "text-white" : "text-gray-900"}`}>{v}</p>
           </div>
@@ -486,8 +239,8 @@ function StatsPanel({ pages, text }: { pages: Page[]; text: string }) {
           {topWords.map(([word, count]) => (
             <div key={word} className="flex items-center gap-2">
               <span className={`w-24 text-xs text-right truncate ${dark ? "text-gray-400" : "text-gray-600"}`}>{word}</span>
-              <div className={`flex-1 rounded-full h-1.5 ${dark ? "bg-gray-700" : "bg-gray-100"}`}>
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${(count / maxCount) * 100}%` }} />
+              <div className={`flex-1 rounded-full h-2 ${dark ? "bg-gray-700" : "bg-gray-100"}`}>
+                <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${(count / maxCount) * 100}%` }} />
               </div>
               <span className={`w-6 text-right text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{count}</span>
             </div>
@@ -505,24 +258,24 @@ function RedactPanel({ terms, onAdd, onRemove }: { terms: string[]; onAdd: (t: s
   const [input, setInput] = useState("");
   function add() { if (input.trim()) { onAdd(input.trim()); setInput(""); } }
   return (
-    <div className={`rounded-xl border p-4 space-y-3 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-      <p className={`text-xs font-semibold uppercase tracking-wide ${dark ? "text-gray-500" : "text-gray-400"}`}>Redact Terms</p>
+    <div className={`rounded-2xl border p-5 space-y-3 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+      <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Redact Terms</h3>
       <div className="flex gap-2">
         <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
           placeholder="Word or phrase to redact…"
-          className={`flex-1 rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-red-500 ${dark ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400"}`} />
-        <button onClick={add} className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors">Add</button>
+          className={`flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 ${dark ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400"}`} />
+        <button onClick={add} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors">Add</button>
       </div>
       {terms.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {terms.map((t, i) => (
-            <span key={i} className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${dark ? "bg-red-900/40 text-red-300" : "bg-red-50 text-red-700 border border-red-200"}`}>
-              {t}<button onClick={() => onRemove(i)} className="ml-0.5 opacity-60 hover:opacity-100">×</button>
+            <span key={i} className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${dark ? "bg-red-900/40 text-red-300" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {t}<button onClick={() => onRemove(i)} className="ml-1 opacity-60 hover:opacity-100 text-sm">&times;</button>
             </span>
           ))}
         </div>
       )}
-      <p className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>Terms appear as ████ in view and all downloads.</p>
+      <p className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>Redacted terms appear as blocks in view and all downloads.</p>
     </div>
   );
 }
@@ -545,13 +298,13 @@ function ComparePanel({ label }: { label: string }) {
 
   return (
     <div className="flex flex-col">
-      <div className={`px-4 py-2 rounded-t-xl border border-b-0 text-xs font-semibold uppercase tracking-wide ${dark ? "bg-gray-800 border-gray-700 text-gray-500" : "bg-gray-50 border-gray-200 text-gray-400"}`}>{label}</div>
-      <div className={`rounded-b-xl border overflow-auto max-h-[72vh] ${dark ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}`}>
+      <div className={`px-4 py-2.5 rounded-t-2xl border border-b-0 text-xs font-bold uppercase tracking-wider ${dark ? "bg-gray-800 border-gray-700 text-gray-500" : "bg-blue-50 border-blue-200 text-blue-600"}`}>{label}</div>
+      <div className={`rounded-b-2xl border overflow-auto max-h-[72vh] ${dark ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}`}>
         {(status === "idle" || status === "error") && (
           <div className="flex flex-col items-center justify-center h-48 gap-3 cursor-pointer p-6" onClick={() => inputRef.current?.click()}>
             <input ref={inputRef} type="file" accept={ACCEPTED_EXTS.join(",")} className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }} />
-            <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+            <svg className={`w-10 h-10 ${dark ? "text-gray-700" : "text-blue-200"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
             <p className={`text-sm ${dark ? "text-gray-600" : "text-gray-400"}`}>Click to upload</p>
@@ -560,134 +313,23 @@ function ComparePanel({ label }: { label: string }) {
         )}
         {status === "loading" && (
           <div className="flex items-center justify-center h-48">
-            <svg className="w-5 h-5 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
         {status === "success" && result && (
-          <div className="px-6 py-4 space-y-5">
-            <p className={`text-xs font-medium ${dark ? "text-gray-500" : "text-gray-400"}`}>{result.filename}</p>
+          <div className="px-6 py-4 space-y-4">
+            <p className={`text-xs font-semibold ${dark ? "text-gray-400" : "text-blue-600"}`}>{result.filename}</p>
             {result.kind === "pdf" ? result.pages.map((p) => (
-              <div key={p.page_number}>
-                <div className={`flex items-center gap-3 py-2`}>
-                  <div className={`flex-1 h-px ${dark ? "bg-gray-800" : "bg-gray-100"}`} />
-                  <span className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>Page {p.page_number}</span>
-                  <div className={`flex-1 h-px ${dark ? "bg-gray-800" : "bg-gray-100"}`} />
-                </div>
-                <pre className={`text-xs whitespace-pre-wrap font-sans leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{p.text || "—"}</pre>
+              <div key={p.page_number} className={`rounded-xl border p-4 ${dark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"}`}>
+                <p className={`text-xs font-semibold mb-2 ${dark ? "text-gray-500" : "text-gray-400"}`}>Page {p.page_number}</p>
+                <p className={`text-sm whitespace-pre-wrap leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{p.text || "—"}</p>
               </div>
             )) : (
-              <pre className={`text-xs whitespace-pre-wrap font-sans leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{(result as ImageResult).text || "—"}</pre>
+              <p className={`text-sm whitespace-pre-wrap leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{(result as ImageResult).text || "—"}</p>
             )}
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── DocumentPage ─────────────────────────────────────────────────────────────
-
-interface DocumentPageProps {
-  page: Page;
-  effectiveText: string;
-  regex: RegExp | null;
-  currentLocalIdx: number;
-  collapsed: boolean;
-  onToggleCollapse: () => void;
-  isBookmarked: boolean;
-  onToggleBookmark: () => void;
-  isDragging: boolean;
-  onDragStart: () => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
-}
-
-function DocumentPage({
-  page, effectiveText, regex, currentLocalIdx,
-  collapsed, onToggleCollapse,
-  isBookmarked, onToggleBookmark,
-  isDragging, onDragStart, onDragOver, onDragEnd,
-}: DocumentPageProps) {
-  const dark = useContext(DarkCtx);
-  const [pageCopied, setPageCopied] = useState(false);
-  const hasTable = useMemo(() => detectTable(page.text), [page.text]);
-
-  function copyPage() {
-    navigator.clipboard.writeText(effectiveText).then(() => {
-      setPageCopied(true); setTimeout(() => setPageCopied(false), 2000);
-    });
-  }
-
-  const ruleCls = dark ? "bg-gray-800" : "bg-gray-200";
-  const labelCls = dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600";
-
-  return (
-    <div id={`page-${page.page_number}`} draggable
-      onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd}
-      className={`scroll-mt-16 transition-opacity ${isDragging ? "opacity-30" : ""}`}>
-
-      {/* ── Page divider ── */}
-      <div className="group flex items-center gap-3 py-5">
-        <div className={`flex-1 h-px ${ruleCls}`} />
-
-        <div className="flex items-center gap-2 select-none">
-          {/* Collapse toggle */}
-          <button onClick={onToggleCollapse}
-            className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${labelCls}`}>
-            {collapsed && (
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            )}
-            Page {page.page_number}
-          </button>
-
-          {/* Inline badges */}
-          {page.method === "ocr" && (
-            <span className={`text-xs font-medium ${dark ? "text-amber-500/70" : "text-amber-400"}`}>OCR</span>
-          )}
-          {hasTable && (
-            <span className={`text-xs font-medium ${dark ? "text-purple-500/70" : "text-purple-400"}`}>Table</span>
-          )}
-
-          {/* Hover actions */}
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5">
-            <button onClick={onToggleBookmark} title={isBookmarked ? "Remove bookmark" : "Bookmark"}
-              className={`transition-colors ${isBookmarked ? "text-amber-500" : dark ? "text-gray-700 hover:text-amber-400" : "text-gray-300 hover:text-amber-500"}`}>
-              <svg className="w-3.5 h-3.5" fill={isBookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
-              </svg>
-            </button>
-            <button onClick={copyPage} title="Copy page"
-              className={`transition-colors ${dark ? "text-gray-700 hover:text-gray-400" : "text-gray-300 hover:text-gray-500"}`}>
-              {pageCopied
-                ? <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>}
-            </button>
-            <svg className={`w-3.5 h-3.5 cursor-grab ${dark ? "text-gray-700" : "text-gray-300"}`} fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
-            </svg>
-          </div>
-        </div>
-
-        <div className={`flex-1 h-px ${ruleCls}`} />
-      </div>
-
-      {/* ── Text content ── */}
-      {!collapsed && (
-        <div className="pb-2">
-          {effectiveText.trim() ? (
-            <p className={`text-[15px] leading-[1.75] whitespace-pre-wrap font-sans ${dark ? "text-gray-200" : "text-gray-800"}`}>
-              {highlightText(effectiveText, regex, currentLocalIdx)}
-            </p>
-          ) : (
-            <p className={`text-sm italic py-2 ${dark ? "text-gray-700" : "text-gray-400"}`}>No text found on this page.</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -710,7 +352,6 @@ export default function Home() {
   const [bookmarkedPages, setBookmarkedPages] = useState<Set<number>>(new Set());
 
   // Search
-  const [searchExpanded, setSearchExpanded] = useState(false);
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
@@ -721,15 +362,12 @@ export default function Home() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // View options
-  const [showPageNav, setShowPageNav] = useState(false);
+  const [showPageNav, setShowPageNav] = useState(true);
   const [fromPage, setFromPage] = useState(1);
   const [toPage, setToPage] = useState(1);
   const [showStats, setShowStats] = useState(false);
   const [showRedact, setShowRedact] = useState(false);
   const [redactTerms, setRedactTerms] = useState<string[]>([]);
-
-  // Info panel
-  const [showDetails, setShowDetails] = useState(false);
 
   // Copy
   const [copied, setCopied] = useState(false);
@@ -741,7 +379,10 @@ export default function Home() {
   const [mergeError, setMergeError] = useState("");
   const mergeInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const filenameRowRef = useRef<HTMLDivElement>(null);
+
+  // Download dropdown
+  const [showDownload, setShowDownload] = useState(false);
+  const downloadRef = useRef<HTMLDivElement>(null);
 
   // Effects
   useEffect(() => {
@@ -763,13 +404,17 @@ export default function Home() {
       setFromPage(1); setToPage(result.total_pages);
       setCollapsedPages(new Set()); setBookmarkedPages(new Set());
       setModifiedTexts(new Map()); setRedactTerms([]);
-      setSearchExpanded(false); setQuery("");
+      setQuery(""); setShowPageNav(true);
     }
   }, [result]);
   useEffect(() => { setCurrentMatchIdx(0); }, [query, caseSensitive, wholeWord, fromPage, toPage]);
   useEffect(() => {
-    if (searchExpanded) setTimeout(() => searchInputRef.current?.focus(), 50);
-  }, [searchExpanded]);
+    function h(e: MouseEvent) {
+      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) setShowDownload(false);
+    }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
   // Derived
   const getEff = useCallback((page: Page): string => {
@@ -815,7 +460,7 @@ export default function Home() {
     const match = allMatches[c];
     if (!match) return;
     setCollapsedPages((prev) => { const n = new Set(prev); n.delete(match.pageNum); return n; });
-    setTimeout(() => document.getElementById(`page-${match.pageNum}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    setTimeout(() => document.getElementById(`page-${match.pageNum}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
   }
 
   function replaceCurrent() {
@@ -882,9 +527,9 @@ export default function Home() {
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ""; }
 
   function reset() {
-    setStatus("idle"); setResult(null); setErrorMsg(""); setQuery(""); setSearchExpanded(false);
+    setStatus("idle"); setResult(null); setErrorMsg(""); setQuery("");
     setPageOrder([]); setCollapsedPages(new Set()); setBookmarkedPages(new Set());
-    setModifiedTexts(new Map()); setRedactTerms([]); setShowDetails(false);
+    setModifiedTexts(new Map()); setRedactTerms([]);
   }
 
   async function processMergeFiles(files: FileList) {
@@ -922,37 +567,53 @@ export default function Home() {
   function collapseAll() { setCollapsedPages(new Set(displayPages.map((p) => p.page_number))); }
 
   const dark = darkMode;
-  const pageBg = dark ? "bg-gray-950 text-gray-100" : "bg-white text-gray-900";
-  const navBg = dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200";
-  const toolbarBg = dark ? "border-gray-800" : "border-gray-200";
+  const btnCls = dark
+    ? "bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600"
+    : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50";
+  const btnActiveCls = dark
+    ? "bg-blue-900 border-blue-700 text-blue-300"
+    : "bg-blue-50 border-blue-300 text-blue-700";
+
+  // Download options
+  const base = result?.filename?.replace(/\.[^.]+$/, "") ?? "doc";
+  const downloadOpts = result?.kind === "pdf" ? [
+    { label: "Plain Text (.txt)", ext: "txt", mime: "text/plain", build: () => buildTxt(downloadPages, getEff) },
+    { label: "JSON (.json)", ext: "json", mime: "application/json", build: () => buildJson(result, downloadPages, getEff) },
+    { label: "Markdown (.md)", ext: "md", mime: "text/markdown", build: () => buildMd(result.filename, downloadPages, getEff) },
+  ] : [
+    { label: "Plain Text (.txt)", ext: "txt", mime: "text/plain", build: () => (result as ImageResult).text },
+  ];
 
   return (
     <DarkCtx.Provider value={darkMode}>
-      <div className={`min-h-screen ${pageBg}`}>
+      <div className={`min-h-screen transition-colors ${dark ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900"}`}>
 
         {/* ── Navbar ── */}
-        <header className={`border-b sticky top-0 z-20 ${navBg}`}>
-          <div className="max-w-4xl mx-auto px-6 h-12 flex items-center gap-4">
-            <span className={`text-sm font-semibold tracking-tight ${dark ? "text-gray-200" : "text-gray-900"}`}>doc-to-text</span>
-            <div className="flex items-center gap-0.5 ml-2">
+        <header className={`border-b sticky top-0 z-30 backdrop-blur ${dark ? "bg-gray-900/95 border-gray-800" : "bg-white/95 border-gray-200"}`}>
+          <div className="max-w-5xl mx-auto px-6 h-14 flex items-center gap-4">
+            <span className={`text-base font-bold tracking-tight ${dark ? "text-white" : "text-gray-900"}`}>doc-to-text</span>
+
+            {/* Mode tabs */}
+            <div className={`flex items-center rounded-lg border p-0.5 ml-3 ${dark ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-gray-100"}`}>
               {(["single", "compare", "merge"] as AppMode[]).map((m) => (
                 <button key={m} onClick={() => setAppMode(m)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize ${appMode === m
-                    ? dark ? "bg-gray-700 text-gray-100" : "bg-gray-100 text-gray-900"
-                    : dark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-700"}`}>
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${appMode === m
+                    ? dark ? "bg-gray-600 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                    : dark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}>
                   {m}
                 </button>
               ))}
             </div>
-            <div className="ml-auto flex items-center gap-2">
+
+            <div className="ml-auto flex items-center gap-3">
               {status === "success" && appMode === "single" && (
-                <button onClick={reset} className={`text-xs transition-colors ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>
-                  ← New file
+                <button onClick={reset} className={`text-xs font-medium transition-colors ${dark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-700"}`}>
+                  &larr; New file
                 </button>
               )}
-              {/* Dark mode icon */}
+              {/* Dark mode toggle */}
               <button onClick={() => setDarkMode((d) => !d)} title={dark ? "Light mode" : "Dark mode"}
-                className={`p-1.5 rounded-md transition-colors ${dark ? "text-gray-500 hover:text-yellow-400 hover:bg-gray-800" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
+                className={`p-2 rounded-lg transition-colors ${dark ? "text-gray-500 hover:text-yellow-400 hover:bg-gray-800" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
                 {dark
                   ? <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" /></svg>
                   : <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" /></svg>}
@@ -961,11 +622,11 @@ export default function Home() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-6">
+        <main className="max-w-5xl mx-auto px-6">
 
           {/* ══ COMPARE ══ */}
           {appMode === "compare" && (
-            <div className="grid grid-cols-2 gap-4 py-8">
+            <div className="grid grid-cols-2 gap-5 py-8">
               <ComparePanel label="Document A" />
               <ComparePanel label="Document B" />
             </div>
@@ -976,42 +637,42 @@ export default function Home() {
             <div className="py-8 space-y-5">
               {mergeStatus !== "success" && (
                 <div onClick={() => mergeInputRef.current?.click()}
-                  className={`cursor-pointer rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 py-16 text-center transition-colors ${dark ? "border-gray-800 hover:border-gray-700" : "border-gray-200 hover:border-gray-300"}`}>
+                  className={`cursor-pointer rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 py-20 text-center transition-all ${dark ? "border-gray-700 hover:border-gray-600 hover:bg-gray-900" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"}`}>
                   <input ref={mergeInputRef} type="file" multiple accept={ACCEPTED_EXTS.join(",")} className="hidden"
                     onChange={(e) => { if (e.target.files?.length) processMergeFiles(e.target.files); e.target.value = ""; }} />
-                  <svg className="w-8 h-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  <svg className={`w-12 h-12 ${dark ? "text-gray-700" : "text-blue-200"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                   <div>
-                    <p className={`text-sm font-medium ${dark ? "text-gray-400" : "text-gray-600"}`}>Select multiple files to merge</p>
-                    <p className={`text-xs mt-1 ${dark ? "text-gray-600" : "text-gray-400"}`}>PDF, PNG, JPG, JPEG, TIFF, BMP</p>
+                    <p className={`text-base font-medium ${dark ? "text-gray-400" : "text-gray-600"}`}>Select multiple files to merge</p>
+                    <p className={`text-sm mt-1 ${dark ? "text-gray-600" : "text-gray-400"}`}>PDF, PNG, JPG, JPEG, TIFF, BMP</p>
                   </div>
                   {mergeStatus === "error" && <p className="text-sm text-red-500">{mergeError}</p>}
                 </div>
               )}
-              {mergeStatus === "loading" && <div className="flex justify-center py-20"><svg className="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg></div>}
+              {mergeStatus === "loading" && <div className="flex justify-center py-20"><div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" /></div>}
               {mergeStatus === "success" && mergedSections.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <p className={`text-sm font-medium ${dark ? "text-gray-300" : "text-gray-700"}`}>{mergedSections.length} files merged</p>
-                    <button onClick={() => { setMergedSections([]); setMergeStatus("idle"); }} className={`text-xs ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>← Start over</button>
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4">
+                    <p className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>{mergedSections.length} files merged</p>
+                    <button onClick={() => { setMergedSections([]); setMergeStatus("idle"); }} className={`text-xs font-medium ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>&larr; Start over</button>
                     <button onClick={() => triggerDownload(buildMergeTxt(mergedSections), "merged.txt", "text/plain")}
-                      className="ml-auto inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                      className="ml-auto inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
                       Download merged.txt
                     </button>
                   </div>
                   {mergedSections.map((section, si) => (
-                    <div key={si}>
-                      <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${dark ? "text-gray-500" : "text-gray-400"}`}>{section.filename}</p>
-                      {section.pages.map((p) => (
-                        <div key={p.page_number} className="mb-4">
-                          <div className={`flex items-center gap-3 py-3`}>
-                            <div className={`flex-1 h-px ${dark ? "bg-gray-800" : "bg-gray-100"}`} />
-                            <span className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>Page {p.page_number}</span>
-                            <div className={`flex-1 h-px ${dark ? "bg-gray-800" : "bg-gray-100"}`} />
+                    <div key={si} className={`rounded-2xl border overflow-hidden ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
+                      <div className={`px-5 py-3 border-b ${dark ? "bg-gray-800 border-gray-700" : "bg-blue-50 border-blue-100"}`}>
+                        <p className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-blue-700"}`}>{section.filename}</p>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        {section.pages.map((p) => (
+                          <div key={p.page_number}>
+                            <p className={`text-xs font-medium mb-2 ${dark ? "text-gray-600" : "text-gray-400"}`}>Page {p.page_number}</p>
+                            <p className={`text-sm whitespace-pre-wrap leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{p.text || "—"}</p>
                           </div>
-                          <p className={`text-sm whitespace-pre-wrap font-sans leading-relaxed ${dark ? "text-gray-300" : "text-gray-700"}`}>{p.text || "—"}</p>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1024,21 +685,23 @@ export default function Home() {
             <>
               {/* Drop zone */}
               {(status === "idle" || status === "error") && (
-                <div className="py-16">
+                <div className="py-20">
                   <div onDrop={onFileDrop} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave}
                     onClick={() => inputRef.current?.click()}
-                    className={`cursor-pointer rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 py-20 text-center transition-colors ${fileDragging ? "border-blue-400 bg-blue-50 dark:bg-blue-900/10" : dark ? "border-gray-800 hover:border-gray-700" : "border-gray-200 hover:border-gray-300"}`}>
+                    className={`cursor-pointer rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-5 py-24 text-center transition-all ${fileDragging ? "border-blue-400 bg-blue-50 dark:bg-blue-900/10" : dark ? "border-gray-700 hover:border-gray-600 hover:bg-gray-900" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"}`}>
                     <input ref={inputRef} type="file" accept={ACCEPTED_EXTS.join(",")} className="hidden" onChange={onFileChange} />
-                    <svg className="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <svg className={`w-14 h-14 ${fileDragging ? "text-blue-400" : dark ? "text-gray-700" : "text-blue-200"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                     </svg>
                     <div>
-                      <p className={`text-base font-medium ${dark ? "text-gray-400" : "text-gray-600"}`}>{fileDragging ? "Drop file here" : "Drop a file or click to browse"}</p>
-                      <p className={`text-xs mt-1.5 ${dark ? "text-gray-600" : "text-gray-400"}`}>PDF · PNG · JPG · JPEG · TIFF · BMP</p>
+                      <p className={`text-lg font-medium ${dark ? "text-gray-400" : "text-gray-600"}`}>{fileDragging ? "Drop file here" : "Drop a file or click to browse"}</p>
+                      <p className={`text-sm mt-2 ${dark ? "text-gray-600" : "text-gray-400"}`}>PDF, PNG, JPG, JPEG, TIFF, BMP</p>
                     </div>
                   </div>
                   {status === "error" && (
-                    <p className="mt-4 text-sm text-red-500 text-center">{errorMsg}</p>
+                    <div className="mt-4 text-center">
+                      <p className="text-sm text-red-500">{errorMsg}</p>
+                    </div>
                   )}
                 </div>
               )}
@@ -1046,26 +709,29 @@ export default function Home() {
               {/* Loading */}
               {status === "loading" && (
                 <div className="flex flex-col items-center justify-center py-40 gap-4">
-                  <svg className="w-7 h-7 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  <p className={`text-sm ${dark ? "text-gray-600" : "text-gray-400"}`}>Extracting text…</p>
+                  <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                  <p className={`text-sm ${dark ? "text-gray-500" : "text-gray-400"}`}>Extracting text…</p>
                 </div>
               )}
 
-              {/* Document view */}
+              {/* ══ SUCCESS ══ */}
               {status === "success" && result && (
-                <div className="py-8 space-y-5">
+                <div className="py-8 space-y-6">
 
                   {/* ── Filename ── */}
-                  <div className="flex items-center gap-3 min-w-0 flex-wrap">
-                    <h2 className={`text-lg font-semibold ${dark ? "text-gray-100" : "text-gray-900"}`}>{result.filename}</h2>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className={`text-xl font-bold ${dark ? "text-white" : "text-gray-900"}`}>{result.filename}</h2>
+                    {result.kind === "pdf" && (
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${dark ? "bg-blue-900/40 text-blue-300" : "bg-blue-100 text-blue-700"}`}>
+                        {detectedLang}
+                      </span>
+                    )}
                     {result.kind === "pdf" && bookmarkedPages.size > 0 && (
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap ml-auto">
+                        <span className={`text-xs mr-1 ${dark ? "text-gray-600" : "text-gray-400"}`}>Bookmarks:</span>
                         {pagesInRange.filter((p) => bookmarkedPages.has(p.page_number)).map((p) => (
                           <button key={p.page_number} onClick={() => scrollToPage(p.page_number)}
-                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:bg-amber-200 transition-colors">
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${dark ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`}>
                             <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" /></svg>
                             {p.page_number}
                           </button>
@@ -1076,136 +742,228 @@ export default function Home() {
 
                   {/* ── Summary cards ── */}
                   {result.kind === "pdf" && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {([
-                        ["Pages", result.total_pages.toString()],
-                        ["Words", fmt(wordCount)],
-                        ["Characters", fmt(result.total_characters)],
-                        ["Extract time", `${result.extraction_time_seconds}s`],
-                      ] as [string, string][]).map(([label, value]) => (
-                        <div key={label} className={`rounded-xl border px-4 py-3 ${dark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"}`}>
-                          <p className={`text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
-                          <p className={`text-2xl font-bold mt-0.5 ${dark ? "text-white" : "text-gray-900"}`}>{value}</p>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{result.total_pages}</p>
+                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Pages</p>
+                      </div>
+                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{fmt(result.total_characters)}</p>
+                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Characters</p>
+                      </div>
+                      <div className={`rounded-2xl border p-5 text-center ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                        <p className={`text-3xl font-bold ${dark ? "text-blue-400" : "text-blue-600"}`}>{result.extraction_time_seconds}s</p>
+                        <p className={`text-xs font-medium uppercase tracking-wider mt-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>Extract Time</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Extra stats row ── */}
+                  {result.kind === "pdf" && (
+                    <div className={`flex items-center gap-6 text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{fmt(wordCount)}</strong> words</span>
+                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{fmt(lineCount)}</strong> lines</span>
+                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>~{readingMinutes < 1 ? "< 1" : readingMinutes} min</strong> reading time</span>
+                      <span><strong className={dark ? "text-gray-300" : "text-gray-600"}>{result.pages.filter((p) => p.method === "ocr").length}</strong> OCR pages</span>
                     </div>
                   )}
 
                   {/* ── Search bar ── */}
                   {result.kind === "pdf" && (
-                    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 shadow-sm ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
-                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 0z" />
-                      </svg>
-                      <input ref={searchInputRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); navigateToMatch(e.shiftKey ? safeMatchIdx - 1 : safeMatchIdx + 1); } if (e.key === "Escape") setQuery(""); }}
-                        placeholder="Search text… (Enter = next, Shift+Enter = prev)"
-                        className={`flex-1 bg-transparent text-sm focus:outline-none ${dark ? "text-gray-200 placeholder-gray-600" : "text-gray-800 placeholder-gray-400"}`} />
-                      {query && (
-                        <button onClick={() => setQuery("")} className={`flex-shrink-0 ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-300 hover:text-gray-500"}`}>
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      )}
-                      {query.trim() && (
-                        <>
-                          <button onClick={() => navigateToMatch(safeMatchIdx - 1)} disabled={!allMatches.length}
-                            className={`p-1 rounded transition-colors disabled:opacity-30 ${dark ? "text-gray-500 hover:text-gray-300 hover:bg-gray-800" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+                    <div className={`rounded-2xl border overflow-hidden ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                      <div className="flex items-center gap-2 px-4 py-3">
+                        <svg className={`w-5 h-5 flex-shrink-0 ${dark ? "text-gray-600" : "text-blue-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803a7.5 7.5 0 0010.607 0z" />
+                        </svg>
+                        <input ref={searchInputRef} type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); navigateToMatch(e.shiftKey ? safeMatchIdx - 1 : safeMatchIdx + 1); } if (e.key === "Escape") setQuery(""); }}
+                          placeholder="Search extracted text… (Enter = next, Shift+Enter = prev)"
+                          className={`flex-1 bg-transparent text-sm focus:outline-none ${dark ? "text-gray-200 placeholder-gray-600" : "text-gray-800 placeholder-gray-400"}`} />
+
+                        {/* Match nav */}
+                        {query.trim() && (
+                          <div className="flex items-center gap-1">
+                            <span className={`text-xs tabular-nums mr-1 ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                              {allMatches.length === 0 ? "0 results" : `${safeMatchIdx + 1} of ${allMatches.length}`}
+                            </span>
+                            <button onClick={() => navigateToMatch(safeMatchIdx - 1)} disabled={!allMatches.length}
+                              className={`p-1 rounded-md transition-colors disabled:opacity-30 ${dark ? "text-gray-500 hover:text-white hover:bg-gray-700" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+                            </button>
+                            <button onClick={() => navigateToMatch(safeMatchIdx + 1)} disabled={!allMatches.length}
+                              className={`p-1 rounded-md transition-colors disabled:opacity-30 ${dark ? "text-gray-500 hover:text-white hover:bg-gray-700" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                            </button>
+                          </div>
+                        )}
+
+                        {query && (
+                          <button onClick={() => setQuery("")} className={`p-1 rounded-md ${dark ? "text-gray-600 hover:text-gray-300" : "text-gray-300 hover:text-gray-500"}`}>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                           </button>
-                          <button onClick={() => navigateToMatch(safeMatchIdx + 1)} disabled={!allMatches.length}
-                            className={`p-1 rounded transition-colors disabled:opacity-30 ${dark ? "text-gray-500 hover:text-gray-300 hover:bg-gray-800" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}>
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                          </button>
-                          <span className={`text-xs tabular-nums flex-shrink-0 min-w-[3.5rem] text-center ${dark ? "text-gray-500" : "text-gray-400"}`}>
-                            {allMatches.length === 0 ? "No results" : `${safeMatchIdx + 1} / ${allMatches.length}`}
-                          </span>
-                        </>
+                        )}
+
+                        {/* Toggles */}
+                        <div className={`w-px h-5 mx-1 ${dark ? "bg-gray-700" : "bg-gray-200"}`} />
+                        <button onClick={() => setCaseSensitive((v) => !v)} title="Match case"
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition-colors ${caseSensitive ? btnActiveCls : btnCls} border`}>Aa</button>
+                        <button onClick={() => setWholeWord((v) => !v)} title="Whole word"
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition-colors ${wholeWord ? btnActiveCls : btnCls} border`}>W</button>
+                        <button onClick={() => setShowReplace((v) => !v)} title="Find & Replace"
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition-colors ${showReplace ? btnActiveCls : btnCls} border`}>&#8597;</button>
+                      </div>
+
+                      {/* Replace row */}
+                      {showReplace && (
+                        <div className={`flex items-center gap-2 px-4 py-3 border-t ${dark ? "border-gray-700" : "border-gray-100"}`}>
+                          <svg className={`w-5 h-5 flex-shrink-0 ${dark ? "text-gray-600" : "text-gray-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+                          <input type="text" value={replaceWith} onChange={(e) => setReplaceWith(e.target.value)}
+                            placeholder="Replace with…"
+                            className={`flex-1 bg-transparent text-sm focus:outline-none ${dark ? "text-gray-200 placeholder-gray-600" : "text-gray-800 placeholder-gray-400"}`} />
+                          <button onClick={replaceCurrent} disabled={!currentMatch}
+                            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors disabled:opacity-40 ${btnCls}`}>Replace</button>
+                          <button onClick={replaceAll} disabled={!allMatches.length}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-40">Replace All</button>
+                          {modifiedTexts.size > 0 && (
+                            <>
+                              <span className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>{modifiedTexts.size} modified</span>
+                              <button onClick={() => setModifiedTexts(new Map())} className="text-xs text-red-400 hover:text-red-500 font-medium">Reset</button>
+                            </>
+                          )}
+                        </div>
                       )}
-                      <div className={`w-px h-5 flex-shrink-0 ${dark ? "bg-gray-700" : "bg-gray-200"}`} />
-                      <TBtn active={caseSensitive} onClick={() => setCaseSensitive((v) => !v)} title="Match case">Aa</TBtn>
-                      <TBtn active={wholeWord} onClick={() => setWholeWord((v) => !v)} title="Whole word">W</TBtn>
-                      <TBtn active={showReplace} onClick={() => setShowReplace((v) => !v)} title="Find & Replace">↕</TBtn>
                     </div>
                   )}
 
-                  {/* Replace bar */}
-                  {result.kind === "pdf" && showReplace && (
-                    <div className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 shadow-sm ${dark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"}`}>
-                      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
-                      <input type="text" value={replaceWith} onChange={(e) => setReplaceWith(e.target.value)}
-                        placeholder="Replace with…"
-                        className={`flex-1 bg-transparent text-sm focus:outline-none ${dark ? "text-gray-200 placeholder-gray-600" : "text-gray-800 placeholder-gray-400"}`} />
-                      <button onClick={replaceCurrent} disabled={!currentMatch}
-                        className={`text-xs px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 ${dark ? "border-gray-700 text-gray-400 hover:bg-gray-800" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>Replace</button>
-                      <button onClick={replaceAll} disabled={!allMatches.length}
-                        className="text-xs px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-40">Replace All</button>
-                      {modifiedTexts.size > 0 && (
-                        <>
-                          <span className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>{modifiedTexts.size} page{modifiedTexts.size !== 1 ? "s" : ""} modified</span>
-                          <button onClick={() => setModifiedTexts(new Map())} className="text-xs text-red-400 hover:text-red-500">Reset</button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── Actions toolbar ── */}
-                  <div className={`flex items-center gap-2 flex-wrap border-y py-2.5 ${dark ? "border-gray-800" : "border-gray-100"}`}>
+                  {/* ── Actions bar ── */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Copy All */}
                     <button onClick={copyAll}
-                      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${dark ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                      className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
                       {copied
                         ? <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                         : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>}
                       {copied ? "Copied!" : "Copy All"}
                     </button>
 
-                    <DownloadMenu result={result} pages={downloadPages} getEff={getEff} onCopyMarkdown={copyAsMarkdown} />
+                    {/* Download dropdown */}
+                    <div className="relative" ref={downloadRef}>
+                      <button onClick={() => setShowDownload((v) => !v)}
+                        className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${showDownload ? btnActiveCls : btnCls}`}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                        Download
+                        <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                      </button>
+                      {showDownload && (
+                        <div className={`absolute left-0 top-full mt-2 w-56 rounded-xl border shadow-xl z-40 overflow-hidden ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                          <div className="p-1.5">
+                            {downloadOpts.map((o) => (
+                              <button key={o.ext}
+                                onClick={() => { triggerDownload(o.build(), `${base}.${o.ext}`, o.mime); setShowDownload(false); }}
+                                className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-colors ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-50"}`}>
+                                <span className={`w-10 text-center rounded-md font-mono text-xs font-bold py-1 ${dark ? "bg-gray-700 text-gray-400" : "bg-blue-50 text-blue-600"}`}>.{o.ext}</span>
+                                {o.label}
+                              </button>
+                            ))}
+                            {result.kind === "pdf" && (
+                              <>
+                                <div className={`my-1.5 border-t ${dark ? "border-gray-700" : "border-gray-100"}`} />
+                                <button onClick={() => { copyAsMarkdown(); setShowDownload(false); }}
+                                  className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm rounded-lg transition-colors ${dark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-50"}`}>
+                                  <span className={`w-10 text-center rounded-md font-mono text-xs font-bold py-1 ${dark ? "bg-gray-700 text-gray-400" : "bg-blue-50 text-blue-600"}`}>MD</span>
+                                  Copy as Markdown
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
+                    {/* Print */}
                     <button onClick={handlePrint}
-                      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${dark ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                      className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" /></svg>
                       Print
                     </button>
 
+                    {/* Export Summary */}
                     {result.kind === "pdf" && (
                       <button onClick={exportSummary}
-                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${dark ? "bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
+                        className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" /></svg>
                         Export Summary
                       </button>
                     )}
 
+                    {/* Spacer */}
+                    <div className="flex-1" />
+
+                    {/* View controls */}
                     {result.kind === "pdf" && (
-                      <ViewOptionsMenu
-                        showPageNav={showPageNav} onTogglePageNav={() => setShowPageNav((v) => !v)}
-                        onExpandAll={expandAll} onCollapseAll={collapseAll}
-                        fromPage={fromPage} toPage={toPage} totalPages={result.total_pages}
-                        onFromChange={setFromPage} onToChange={setToPage}
-                        showStats={showStats} onToggleStats={() => setShowStats((v) => !v)}
-                        showRedact={showRedact} onToggleRedact={() => setShowRedact((v) => !v)}
-                      />
+                      <>
+                        <button onClick={expandAll} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${btnCls}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" /></svg>
+                          Expand All
+                        </button>
+                        <button onClick={collapseAll} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${btnCls}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" /></svg>
+                          Collapse All
+                        </button>
+                        <button onClick={() => setShowPageNav((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${showPageNav ? btnActiveCls : btnCls}`}>
+                          Pages
+                        </button>
+                        <button onClick={() => setShowStats((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${showStats ? btnActiveCls : btnCls}`}>
+                          Stats
+                        </button>
+                        <button onClick={() => setShowRedact((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${showRedact ? btnActiveCls : btnCls}`}>
+                          Redact
+                        </button>
+                      </>
                     )}
                   </div>
 
-                  {/* Page navigator */}
-                  {showPageNav && result.kind === "pdf" && (
-                    <div className={`flex flex-wrap gap-1.5 p-3 rounded-xl border ${dark ? "bg-gray-900 border-gray-800" : "bg-gray-50 border-gray-200"}`}>
-                      {orderedPages.map((p) => (
-                        <button key={p.page_number} onClick={() => scrollToPage(p.page_number)}
-                          className={`relative rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                            p.page_number < fromPage || p.page_number > toPage
-                              ? dark ? "text-gray-800" : "text-gray-300"
-                              : dark ? "text-gray-500 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-800 hover:bg-white border border-transparent hover:border-gray-200"
-                          }`}>
-                          {p.page_number}
-                          {bookmarkedPages.has(p.page_number) && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                          )}
-                        </button>
-                      ))}
+                  {/* ── Page range ── */}
+                  {result.kind === "pdf" && (
+                    <div className={`flex items-center gap-3 text-xs ${dark ? "text-gray-500" : "text-gray-400"}`}>
+                      <span>Page range:</span>
+                      <input type="number" min={1} max={toPage} value={fromPage}
+                        onChange={(e) => setFromPage(Math.max(1, Math.min(+e.target.value, toPage)))}
+                        className={`w-14 rounded-lg border px-2 py-1 text-center text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${dark ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-white border-gray-300 text-gray-700"}`} />
+                      <span>to</span>
+                      <input type="number" min={fromPage} max={result.total_pages} value={toPage}
+                        onChange={(e) => setToPage(Math.max(fromPage, Math.min(+e.target.value, result.total_pages)))}
+                        className={`w-14 rounded-lg border px-2 py-1 text-center text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${dark ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-white border-gray-300 text-gray-700"}`} />
+                      <span>of {result.total_pages}</span>
                     </div>
                   )}
 
-                  {/* Stats / Redact panels */}
+                  {/* ── Page navigator ── */}
+                  {showPageNav && result.kind === "pdf" && (
+                    <div className={`flex flex-wrap gap-1.5 p-4 rounded-2xl border ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                      {orderedPages.map((p) => {
+                        const inRange = p.page_number >= fromPage && p.page_number <= toPage;
+                        const isBookmarked = bookmarkedPages.has(p.page_number);
+                        return (
+                          <button key={p.page_number} onClick={() => scrollToPage(p.page_number)}
+                            className={`relative rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                              !inRange
+                                ? dark ? "text-gray-800 cursor-default" : "text-gray-300 cursor-default"
+                                : isBookmarked
+                                  ? dark ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60" : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                                  : dark ? "text-gray-400 hover:text-white hover:bg-gray-700" : "text-gray-600 hover:text-gray-900 hover:bg-blue-50"
+                            }`}>
+                            {p.page_number}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ── Stats / Redact panels ── */}
                   {(showStats || showRedact) && result.kind === "pdf" && (
                     <div className="space-y-4">
                       {showStats && <StatsPanel pages={pagesInRange} text={rangeText} />}
@@ -1219,30 +977,86 @@ export default function Home() {
 
                   {/* ── Document content ── */}
                   {result.kind === "pdf" ? (
-                    <div>
-                      {displayPages.map((page, idx) => (
-                        <DocumentPage key={page.page_number} page={page}
-                          effectiveText={getEff(page)}
-                          regex={searchRegex}
-                          currentLocalIdx={currentMatch?.pageNum === page.page_number ? currentMatch.localIdx : -1}
-                          collapsed={collapsedPages.has(page.page_number)}
-                          onToggleCollapse={() => setCollapsedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; })}
-                          isBookmarked={bookmarkedPages.has(page.page_number)}
-                          onToggleBookmark={() => setBookmarkedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; })}
-                          isDragging={draggingPageNum === page.page_number}
-                          onDragStart={() => handlePageDragStart(idx)}
-                          onDragOver={(e) => handlePageDragOver(e, idx)}
-                          onDragEnd={handlePageDragEnd}
-                        />
-                      ))}
+                    <div className="space-y-4">
+                      {displayPages.map((page, idx) => {
+                        const effectiveText = getEff(page);
+                        const isCollapsed = collapsedPages.has(page.page_number);
+                        const isBookmarked = bookmarkedPages.has(page.page_number);
+                        const isDragging = draggingPageNum === page.page_number;
+                        const hasTable = detectTable(page.text);
+                        const matchLocalIdx = currentMatch?.pageNum === page.page_number ? currentMatch.localIdx : -1;
+
+                        return (
+                          <div key={page.page_number} id={`page-${page.page_number}`}
+                            draggable
+                            onDragStart={() => handlePageDragStart(idx)}
+                            onDragOver={(e) => handlePageDragOver(e, idx)}
+                            onDragEnd={handlePageDragEnd}
+                            className={`rounded-2xl border overflow-hidden scroll-mt-20 transition-all ${isDragging ? "opacity-30 scale-[0.98]" : ""} ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+
+                            {/* Page header */}
+                            <div className={`flex items-center gap-3 px-5 py-3 border-b cursor-pointer select-none ${dark ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50"}`}
+                              onClick={() => setCollapsedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; })}>
+
+                              {/* Collapse arrow */}
+                              <svg className={`w-4 h-4 transition-transform ${isCollapsed ? "-rotate-90" : ""} ${dark ? "text-gray-600" : "text-gray-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                              </svg>
+
+                              <span className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Page {page.page_number}</span>
+
+                              {page.method === "ocr" && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dark ? "bg-amber-900/40 text-amber-400" : "bg-amber-100 text-amber-700"}`}>OCR</span>
+                              )}
+                              {hasTable && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${dark ? "bg-purple-900/40 text-purple-400" : "bg-purple-100 text-purple-700"}`}>Table</span>
+                              )}
+
+                              <span className={`text-xs ml-auto ${dark ? "text-gray-600" : "text-gray-400"}`}>{fmt(page.character_count)} chars</span>
+
+                              {/* Bookmark */}
+                              <button onClick={(e) => { e.stopPropagation(); setBookmarkedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; }); }}
+                                className={`p-1 rounded transition-colors ${isBookmarked ? "text-amber-500" : dark ? "text-gray-700 hover:text-amber-400" : "text-gray-300 hover:text-amber-500"}`}>
+                                <svg className="w-4 h-4" fill={isBookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+                                </svg>
+                              </button>
+
+                              {/* Copy page */}
+                              <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(effectiveText); }}
+                                className={`p-1 rounded transition-colors ${dark ? "text-gray-700 hover:text-gray-400" : "text-gray-300 hover:text-gray-500"}`}>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+                              </button>
+
+                              {/* Drag handle */}
+                              <svg className={`w-4 h-4 cursor-grab ${dark ? "text-gray-700" : "text-gray-300"}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z" />
+                              </svg>
+                            </div>
+
+                            {/* Page content */}
+                            {!isCollapsed && (
+                              <div className="px-5 py-4">
+                                {effectiveText.trim() ? (
+                                  <p className={`text-[15px] leading-[1.8] whitespace-pre-wrap font-sans ${dark ? "text-gray-200" : "text-gray-800"}`}>
+                                    {highlightText(effectiveText, searchRegex, matchLocalIdx)}
+                                  </p>
+                                ) : (
+                                  <p className={`text-sm italic py-4 ${dark ? "text-gray-700" : "text-gray-400"}`}>No text found on this page.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                       {displayPages.length === 0 && searchRegex && (
                         <p className={`text-sm py-16 text-center ${dark ? "text-gray-700" : "text-gray-400"}`}>No pages match your search.</p>
                       )}
                     </div>
                   ) : (
                     /* Image result */
-                    <div className="pt-2">
-                      <p className={`text-[15px] leading-[1.75] whitespace-pre-wrap font-sans ${dark ? "text-gray-200" : "text-gray-800"}`}>
+                    <div className={`rounded-2xl border p-6 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                      <p className={`text-[15px] leading-[1.8] whitespace-pre-wrap font-sans ${dark ? "text-gray-200" : "text-gray-800"}`}>
                         {(result as ImageResult).text || <span className={`italic ${dark ? "text-gray-700" : "text-gray-400"}`}>No text found in this image.</span>}
                       </p>
                     </div>
@@ -1258,9 +1072,9 @@ export default function Home() {
         {/* Go to top */}
         {showGoTop && (
           <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className={`fixed bottom-6 right-6 z-30 rounded-full p-2.5 shadow-lg transition-colors ${dark ? "bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700" : "bg-white text-gray-500 hover:text-gray-800 border border-gray-200 shadow-md"}`}
+            className={`fixed bottom-6 right-6 z-30 rounded-full p-3 shadow-lg transition-all hover:scale-110 ${dark ? "bg-gray-800 text-gray-400 hover:text-white border border-gray-700" : "bg-white text-blue-600 hover:text-blue-700 border border-gray-200 shadow-md"}`}
             title="Back to top">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
           </button>
         )}
       </div>
