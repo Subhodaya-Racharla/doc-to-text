@@ -195,11 +195,13 @@ function triggerDownload(content: string, filename: string, mime: string) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 async function fetchExtract(file: File): Promise<ExtractResult> {
   const ext = getExtension(file.name);
   const endpoint = PDF_EXTS.includes(ext)
-    ? "http://localhost:8000/extract-text"
-    : "http://localhost:8000/extract-text-image";
+    ? `${API_BASE}/extract-text`
+    : `${API_BASE}/extract-text-image`;
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch(endpoint, { method: "POST", body: fd });
