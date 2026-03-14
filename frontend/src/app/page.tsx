@@ -1026,7 +1026,7 @@ export default function Home() {
 
                             {/* Page header */}
                             <div className={`flex items-center gap-3 px-5 py-3 border-b cursor-pointer select-none ${dark ? "border-gray-700 hover:bg-gray-700/50" : "border-gray-100 hover:bg-gray-50"}`}
-                              onClick={() => setCollapsedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; })}>
+                              onClick={() => setCollapsedPages((prev) => { const n = new Set(prev); if (n.has(page.page_number)) n.delete(page.page_number); else n.add(page.page_number); return n; })}>
 
                               {/* Collapse arrow */}
                               <svg className={`w-4 h-4 transition-transform ${isCollapsed ? "-rotate-90" : ""} ${dark ? "text-gray-600" : "text-gray-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1045,7 +1045,7 @@ export default function Home() {
                               <span className={`text-xs ml-auto ${dark ? "text-gray-600" : "text-gray-400"}`}>{fmt(page.character_count)} chars</span>
 
                               {/* Bookmark */}
-                              <button onClick={(e) => { e.stopPropagation(); setBookmarkedPages((prev) => { const n = new Set(prev); n.has(page.page_number) ? n.delete(page.page_number) : n.add(page.page_number); return n; }); }}
+                              <button onClick={(e) => { e.stopPropagation(); setBookmarkedPages((prev) => { const n = new Set(prev); if (n.has(page.page_number)) n.delete(page.page_number); else n.add(page.page_number); return n; }); }}
                                 className={`p-1 rounded transition-colors ${isBookmarked ? "text-amber-500" : dark ? "text-gray-700 hover:text-amber-400" : "text-gray-300 hover:text-amber-500"}`}>
                                 <svg className="w-4 h-4" fill={isBookmarked ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
