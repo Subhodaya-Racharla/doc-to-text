@@ -11,7 +11,7 @@ app = FastAPI(title="doc-to-text API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://frontend-tau-rose-13.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
