@@ -29,7 +29,7 @@ interface PdfResult {
 interface ImageResult { kind: "image"; filename: string; text: string; }
 type ExtractResult = PdfResult | ImageResult;
 type Status = "idle" | "loading" | "success" | "error";
-type AppMode = "single" | "compare" | "merge";
+type AppMode = "single" | "compare" | "merge" | "spreadsheet";
 interface MatchRef { pageNum: number; localIdx: number; }
 interface MergeSection { filename: string; kind: "pdf" | "image"; pages: Page[]; }
 
@@ -390,6 +390,14 @@ export default function Home() {
   const mergeInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Spreadsheet mode
+  const [ssFields, setSsFields] = useState<string[]>([""]);
+  const [ssFiles, setSsFiles] = useState<File[]>([]);
+  const [ssStatus, setSsStatus] = useState<Status>("idle");
+  const [ssError, setSsError] = useState("");
+  const [ssPreview, setSsPreview] = useState<Record<string, string>[] | null>(null);
+  const ssInputRef = useRef<HTMLInputElement>(null);
+
   // Download dropdown
   const [showDownload, setShowDownload] = useState(false);
   const downloadRef = useRef<HTMLDivElement>(null);
@@ -559,6 +567,48 @@ export default function Home() {
     } catch (e: unknown) { setMergeError(e instanceof Error ? e.message : "Error"); setMergeStatus("error"); }
   }
 
+  async function processSpreadsheet() {
+    const validFields = ssFields.filter((f) => f.trim());
+    if (!validFields.length) { setSsError("Add at least one field."); return; }
+    if (!ssFiles.length) { setSsError("Upload at least one file."); return; }
+    setSsStatus("loading"); setSsError(""); setSsPreview(null);
+    try {
+      const fd = new FormData();
+      for (const file of ssFiles) fd.append("files", file);
+      fd.append("fields", JSON.stringify(validFields));
+      const res = await fetch(`${API_BASE}/extract-fields`, { method: "POST", body: fd });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ detail: "Extraction failed" }));
+        throw new Error(data.detail ?? "Extraction failed");
+      }
+      const data = await res.json();
+      setSsPreview(data.rows);
+      setSsStatus("success");
+    } catch (e: unknown) {
+      setSsError(e instanceof Error ? e.message : "Error");
+      setSsStatus("error");
+    }
+  }
+
+  async function downloadSpreadsheet() {
+    const validFields = ssFields.filter((f) => f.trim());
+    if (!validFields.length || !ssFiles.length) return;
+    try {
+      const fd = new FormData();
+      for (const file of ssFiles) fd.append("files", file);
+      fd.append("fields", JSON.stringify(validFields));
+      const res = await fetch(`${API_BASE}/extract-fields-xlsx`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "extracted_data.xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setSsError(e instanceof Error ? e.message : "Download failed");
+    }
+  }
+
   function handlePageDragStart(idx: number) { dragSrcIdxRef.current = idx; setDraggingPageNum(pageOrder[idx]); }
   function handlePageDragOver(e: React.DragEvent, idx: number) {
     e.preventDefault();
@@ -606,7 +656,7 @@ export default function Home() {
 
             {/* Mode tabs */}
             <div className={`flex items-center rounded-lg border p-0.5 ml-3 ${dark ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-gray-100"}`}>
-              {(["single", "compare", "merge"] as AppMode[]).map((m) => (
+              {(["single", "compare", "merge", "spreadsheet"] as AppMode[]).map((m) => (
                 <button key={m} onClick={() => setAppMode(m)}
                   className={`px-3 py-1 rounded-md text-xs font-medium transition-all capitalize ${appMode === m
                     ? dark ? "bg-gray-600 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
@@ -688,6 +738,133 @@ export default function Home() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ══ SPREADSHEET ══ */}
+          {appMode === "spreadsheet" && (
+            <div className="py-8 space-y-6">
+              <h2 className={`text-lg font-bold ${dark ? "text-white" : "text-gray-900"}`}>Structured Spreadsheet Extraction</h2>
+              <p className={`text-sm ${dark ? "text-gray-500" : "text-gray-500"}`}>
+                Upload PDFs, define the fields you want to extract, and download a spreadsheet with the results.
+              </p>
+
+              {/* Field builder */}
+              <div className={`rounded-2xl border p-5 space-y-4 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Fields to Extract</h3>
+                <div className="space-y-2">
+                  {ssFields.map((field, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={field}
+                        onChange={(e) => { const f = [...ssFields]; f[i] = e.target.value; setSsFields(f); }}
+                        placeholder={`Field ${i + 1} (e.g. Patient Name, DOB, Claim Number…)`}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${dark ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-500" : "bg-white border-gray-300 text-gray-900 placeholder-gray-400"}`}
+                      />
+                      {ssFields.length > 1 && (
+                        <button onClick={() => setSsFields(ssFields.filter((_, j) => j !== i))}
+                          className={`p-2 rounded-lg transition-colors ${dark ? "text-gray-600 hover:text-red-400 hover:bg-gray-700" : "text-gray-400 hover:text-red-500 hover:bg-gray-100"}`}>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setSsFields([...ssFields, ""])}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                  Add Field
+                </button>
+              </div>
+
+              {/* File upload */}
+              <div className={`rounded-2xl border p-5 space-y-4 ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Upload Documents</h3>
+                <div
+                  onClick={() => ssInputRef.current?.click()}
+                  className={`cursor-pointer rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 py-12 text-center transition-all ${dark ? "border-gray-700 hover:border-gray-600 hover:bg-gray-900" : "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"}`}>
+                  <input ref={ssInputRef} type="file" multiple accept={ACCEPTED_EXTS.join(",")} className="hidden"
+                    onChange={(e) => { if (e.target.files?.length) setSsFiles(Array.from(e.target.files)); e.target.value = ""; }} />
+                  <svg className={`w-10 h-10 ${dark ? "text-gray-700" : "text-blue-200"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <p className={`text-sm ${dark ? "text-gray-500" : "text-gray-500"}`}>Click to select PDFs or images (multiple allowed)</p>
+                </div>
+                {ssFiles.length > 0 && (
+                  <div className="space-y-1.5">
+                    {ssFiles.map((f, i) => (
+                      <div key={i} className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${dark ? "bg-gray-700/50 text-gray-300" : "bg-gray-50 text-gray-700"}`}>
+                        <svg className="w-4 h-4 flex-shrink-0 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                        <span className="truncate flex-1">{f.name}</span>
+                        <span className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>{(f.size / 1024).toFixed(0)} KB</span>
+                        <button onClick={() => setSsFiles(ssFiles.filter((_, j) => j !== i))}
+                          className={`p-1 rounded transition-colors ${dark ? "text-gray-600 hover:text-red-400" : "text-gray-400 hover:text-red-500"}`}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Extract button */}
+              <div className="flex items-center gap-3">
+                <button onClick={processSpreadsheet} disabled={ssStatus === "loading"}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
+                  {ssStatus === "loading" ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Extracting…</>
+                  ) : (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M21.375 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M12 13.125v1.5m0-1.5c0-.621-.504-1.125-1.125-1.125M12 13.125c0-.621.504-1.125 1.125-1.125m-2.25 0c-.621 0-1.125.504-1.125 1.125m0 1.5v-1.5m0 0c0-.621.504-1.125 1.125-1.125m-1.125 2.625c0 .621.504 1.125 1.125 1.125M3.375 15h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125" /></svg>
+                    Extract Fields</>
+                  )}
+                </button>
+                {ssStatus === "success" && (
+                  <button onClick={() => { setSsStatus("idle"); setSsPreview(null); setSsFiles([]); setSsFields([""]); }}
+                    className={`text-xs font-medium ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>&larr; Start over</button>
+                )}
+              </div>
+
+              {ssError && <p className="text-sm text-red-500">{ssError}</p>}
+
+              {/* Preview table */}
+              {ssPreview && ssPreview.length > 0 && (() => {
+                const headers = Object.keys(ssPreview[0]);
+                return (
+                  <div className={`rounded-2xl border overflow-hidden ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
+                    <div className={`flex items-center justify-between px-5 py-3 border-b ${dark ? "border-gray-700" : "border-gray-100"}`}>
+                      <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Extracted Data Preview</h3>
+                      <button onClick={downloadSpreadsheet}
+                        className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                        Download Excel
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className={dark ? "bg-gray-700/50" : "bg-gray-50"}>
+                            {headers.map((h) => (
+                              <th key={h} className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${dark ? "text-gray-400" : "text-gray-500"}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ssPreview.map((row, ri) => (
+                            <tr key={ri} className={`border-t ${dark ? "border-gray-700" : "border-gray-100"} ${ri % 2 === 0 ? "" : dark ? "bg-gray-700/20" : "bg-gray-50/50"}`}>
+                              {headers.map((h) => (
+                                <td key={h} className={`px-4 py-3 ${dark ? "text-gray-300" : "text-gray-700"} ${row[h] ? "" : dark ? "text-gray-700 italic" : "text-gray-300 italic"}`}>
+                                  {row[h] || "Not found"}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
