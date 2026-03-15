@@ -396,6 +396,10 @@ export default function Home() {
   const [ssStatus, setSsStatus] = useState<Status>("idle");
   const [ssError, setSsError] = useState("");
   const [ssPreview, setSsPreview] = useState<Record<string, string>[] | null>(null);
+  const [ssContext, setSsContext] = useState<Record<string, string>[] | null>(null);
+  const [ssMethod, setSsMethod] = useState<"auto" | "block">("auto");
+  const [ssShowContext, setSsShowContext] = useState(false);
+  const [ssDetecting, setSsDetecting] = useState(false);
   const ssInputRef = useRef<HTMLInputElement>(null);
 
   // Download dropdown
@@ -571,11 +575,12 @@ export default function Home() {
     const validFields = ssFields.filter((f) => f.trim());
     if (!validFields.length) { setSsError("Add at least one field."); return; }
     if (!ssFiles.length) { setSsError("Upload at least one file."); return; }
-    setSsStatus("loading"); setSsError(""); setSsPreview(null);
+    setSsStatus("loading"); setSsError(""); setSsPreview(null); setSsContext(null);
     try {
       const fd = new FormData();
       for (const file of ssFiles) fd.append("files", file);
       fd.append("fields", JSON.stringify(validFields));
+      fd.append("method", ssMethod);
       const res = await fetch(`${API_BASE}/extract-fields`, { method: "POST", body: fd });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ detail: "Extraction failed" }));
@@ -583,10 +588,30 @@ export default function Home() {
       }
       const data = await res.json();
       setSsPreview(data.rows);
+      setSsContext(data.context ?? null);
       setSsStatus("success");
     } catch (e: unknown) {
       setSsError(e instanceof Error ? e.message : "Error");
       setSsStatus("error");
+    }
+  }
+
+  async function autoDetectFields() {
+    if (!ssFiles.length) { setSsError("Upload at least one file first."); return; }
+    setSsDetecting(true); setSsError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", ssFiles[0]);
+      const res = await fetch(`${API_BASE}/auto-detect-fields`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error("Auto-detect failed");
+      const data = await res.json();
+      const fields = (data.detected_fields ?? []).map((d: { field: string }) => d.field);
+      if (fields.length) setSsFields(fields);
+      else setSsError("No fields detected. Try a different document.");
+    } catch (e: unknown) {
+      setSsError(e instanceof Error ? e.message : "Auto-detect failed");
+    } finally {
+      setSsDetecting(false);
     }
   }
 
@@ -763,11 +788,23 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => setSsFields([...ssFields, ""])}
-                  className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                  Add Field
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => setSsFields([...ssFields, ""])}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${btnCls}`}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    Add Field
+                  </button>
+                  <button onClick={autoDetectFields} disabled={ssDetecting || !ssFiles.length}
+                    className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 ${btnCls}`}>
+                    {ssDetecting ? (
+                      <><div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> Detecting…</>
+                    ) : (
+                      <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" /></svg>
+                      Auto-Detect Fields</>
+                    )}
+                  </button>
+                </div>
+                <p className={`text-xs ${dark ? "text-gray-600" : "text-gray-400"}`}>Upload a file first, then click Auto-Detect to find extractable fields automatically.</p>
               </div>
 
               {/* File upload */}
@@ -800,8 +837,18 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Extract button */}
-              <div className="flex items-center gap-3">
+              {/* Method selector + Extract button */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className={`flex items-center rounded-lg border p-0.5 ${dark ? "border-gray-700 bg-gray-800" : "border-gray-200 bg-gray-100"}`}>
+                  {(["auto", "block"] as const).map((m) => (
+                    <button key={m} onClick={() => setSsMethod(m)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${ssMethod === m
+                        ? dark ? "bg-gray-600 text-white shadow-sm" : "bg-white text-gray-900 shadow-sm"
+                        : dark ? "text-gray-500 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"}`}>
+                      {m === "auto" ? "Smart Extract" : "Full Block"}
+                    </button>
+                  ))}
+                </div>
                 <button onClick={processSpreadsheet} disabled={ssStatus === "loading"}
                   className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors disabled:opacity-50">
                   {ssStatus === "loading" ? (
@@ -812,7 +859,7 @@ export default function Home() {
                   )}
                 </button>
                 {ssStatus === "success" && (
-                  <button onClick={() => { setSsStatus("idle"); setSsPreview(null); setSsFiles([]); setSsFields([""]); }}
+                  <button onClick={() => { setSsStatus("idle"); setSsPreview(null); setSsContext(null); setSsFiles([]); setSsFields([""]); }}
                     className={`text-xs font-medium ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>&larr; Start over</button>
                 )}
               </div>
@@ -825,7 +872,15 @@ export default function Home() {
                 return (
                   <div className={`rounded-2xl border overflow-hidden ${dark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
                     <div className={`flex items-center justify-between px-5 py-3 border-b ${dark ? "border-gray-700" : "border-gray-100"}`}>
-                      <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Extracted Data Preview</h3>
+                      <div className="flex items-center gap-3">
+                        <h3 className={`text-sm font-semibold ${dark ? "text-gray-300" : "text-gray-700"}`}>Extracted Data Preview</h3>
+                        {ssContext && (
+                          <button onClick={() => setSsShowContext((v) => !v)}
+                            className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors ${ssShowContext ? btnActiveCls : btnCls}`}>
+                            {ssShowContext ? "Hide Context" : "Show Context"}
+                          </button>
+                        )}
+                      </div>
                       <button onClick={downloadSpreadsheet}
                         className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
@@ -844,11 +899,20 @@ export default function Home() {
                         <tbody>
                           {ssPreview.map((row, ri) => (
                             <tr key={ri} className={`border-t ${dark ? "border-gray-700" : "border-gray-100"} ${ri % 2 === 0 ? "" : dark ? "bg-gray-700/20" : "bg-gray-50/50"}`}>
-                              {headers.map((h) => (
-                                <td key={h} className={`px-4 py-3 ${dark ? "text-gray-300" : "text-gray-700"} ${row[h] ? "" : dark ? "text-gray-700 italic" : "text-gray-300 italic"}`}>
-                                  {row[h] || "Not found"}
-                                </td>
-                              ))}
+                              {headers.map((h) => {
+                                const val = row[h];
+                                const ctx = ssContext?.[ri]?.[h];
+                                return (
+                                  <td key={h} className={`px-4 py-3 ${dark ? "text-gray-300" : "text-gray-700"} ${val ? "" : dark ? "text-gray-700 italic" : "text-gray-300 italic"}`}>
+                                    <div>{val || "Not found"}</div>
+                                    {ssShowContext && ctx && (
+                                      <div className={`mt-1.5 text-xs px-2 py-1.5 rounded-lg font-mono leading-relaxed ${dark ? "bg-gray-900/60 text-gray-500" : "bg-yellow-50 text-gray-500 border border-yellow-100"}`}>
+                                        {ctx}
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           ))}
                         </tbody>
