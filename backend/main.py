@@ -159,30 +159,158 @@ def extract_full_text(contents: bytes) -> str:
     return "\n".join(all_text)
 
 
+def _normalize(s: str) -> str:
+    """Lowercase, strip punctuation (.:,), collapse whitespace."""
+    s = s.lower()
+    s = re.sub(r"[.,:;!?()'\"-]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+# Common abbreviation / alias expansions for fuzzy matching
+_ALIASES: dict[str, list[str]] = {
+    "dob": ["date of birth", "d o b", "birth date", "birthdate"],
+    "date of birth": ["dob", "d o b", "birth date"],
+    "name": ["full name", "applicant name", "candidate name"],
+    "license no": ["licence no", "license number", "licence number",
+                    "dl no", "dl number", "driving license no",
+                    "driving licence no"],
+    "present address": ["current address", "address", "residential address"],
+    "phone": ["phone no", "phone number", "mobile", "mobile no", "contact no"],
+    "email": ["email id", "email address", "e-mail"],
+}
+
+
+def _field_variants(field: str) -> list[str]:
+    """Generate normalized variants of a user field for fuzzy matching."""
+    norm = _normalize(field)
+    variants = {norm}
+
+    # Add known aliases
+    for key, aliases in _ALIASES.items():
+        nk = _normalize(key)
+        if norm == nk or norm in [_normalize(a) for a in aliases]:
+            variants.add(nk)
+            for a in aliases:
+                variants.add(_normalize(a))
+
+    # Generate word-boundary-flexible patterns:
+    # "License No" should match "LICENCE NO", "License No.", "License No :"
+    result = []
+    for v in variants:
+        # Build a regex that matches each word with optional trailing punctuation
+        words = v.split()
+        # Allow single-char OCR variations: c↔e, i↔l, etc. via char-class on each word
+        parts = []
+        for w in words:
+            # Exact word match (case-insensitive), allow trailing dots/colons
+            parts.append(re.escape(w) + r"[.,:;]?")
+        pattern = r"\s+".join(parts)
+        result.append(pattern)
+
+    return result
+
+
+def _find_field_position(text: str, field: str) -> re.Match | None:
+    """Find where a field label appears in text using fuzzy matching."""
+    variants = _field_variants(field)
+
+    for variant_pattern in variants:
+        # Match the field label followed by a separator
+        pattern = rf"(?im)({variant_pattern})\s*[:=\-—\t]\s*"
+        m = re.search(pattern, text)
+        if m:
+            return m
+
+    # Fallback: field label at start of line without explicit separator
+    for variant_pattern in variants:
+        pattern = rf"(?im)^[ \t]*({variant_pattern})\s{{2,}}"
+        m = re.search(pattern, text)
+        if m:
+            return m
+
+    # Last resort: field label followed by newline (value on next line)
+    for variant_pattern in variants:
+        pattern = rf"(?im)({variant_pattern})\s*$"
+        m = re.search(pattern, text)
+        if m:
+            return m
+
+    return None
+
+
+def _looks_like_field_label(line: str) -> bool:
+    """Heuristic: does this line look like the start of a new field?"""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    # A line that contains a colon/equals with text before it is likely a new field
+    if re.match(r"^[A-Za-z][A-Za-z\s.]{1,40}\s*[:=]\s*\S", stripped):
+        return True
+    # ALL-CAPS label followed by separator
+    if re.match(r"^[A-Z][A-Z\s.]{1,40}\s*[:=\-]\s*", stripped):
+        return True
+    return False
+
+
 def extract_field_value(text: str, field: str) -> str:
-    """Try multiple patterns to find a field value in text."""
-    escaped = re.escape(field)
-    patterns = [
-        # "Field Name: value" or "Field Name : value"
-        rf"(?i){escaped}\s*:\s*(.+?)(?:\n|$)",
-        # "Field Name - value"
-        rf"(?i){escaped}\s*-\s*(.+?)(?:\n|$)",
-        # "Field Name  value" (multiple spaces)
-        rf"(?i){escaped}\s{{2,}}(.+?)(?:\n|$)",
-        # "Field Name\nvalue" (field on one line, value on next)
-        rf"(?i){escaped}\s*\n\s*(.+?)(?:\n|$)",
-        # "Field Name = value"
-        rf"(?i){escaped}\s*=\s*(.+?)(?:\n|$)",
-        # Tabular: "Field Name\tvalue"
-        rf"(?i){escaped}\t+(.+?)(?:\n|$)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            value = match.group(1).strip()
-            if value:
-                return value
-    return ""
+    """Extract a field value with normalization, fuzzy matching, and multi-line support."""
+    match = _find_field_position(text, field)
+    if not match:
+        return ""
+
+    # Get text after the matched field label
+    after = text[match.end():]
+
+    # Capture the first line of the value
+    lines = after.split("\n")
+    if not lines:
+        return ""
+
+    first_line = lines[0].strip()
+
+    # If first line is empty, the value might be on the next line(s)
+    start_idx = 0
+    if not first_line and len(lines) > 1:
+        start_idx = 1
+        first_line = lines[1].strip()
+
+    # Collect multi-line value: keep reading lines until we hit an empty line,
+    # a new field label, or end of text
+    value_parts = []
+    for i in range(start_idx, len(lines)):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Stop at empty line (but only after we have some content)
+        if not stripped and value_parts:
+            break
+
+        # Stop if this line looks like a new field label (but not the first value line)
+        if value_parts and _looks_like_field_label(stripped):
+            break
+
+        if stripped:
+            value_parts.append(stripped)
+
+        # For single-line fields (value on same line as label), just take the first line
+        if start_idx == 0 and value_parts:
+            # Check if next line could be a continuation (no separator = likely continuation)
+            if i + 1 < len(lines):
+                next_stripped = lines[i + 1].strip()
+                if not next_stripped or _looks_like_field_label(next_stripped):
+                    break
+                # If next line is just data (no colon/separator), it's a continuation
+                if not re.search(r"[:=]", next_stripped):
+                    continue
+                else:
+                    break
+            else:
+                break
+
+    value = " ".join(value_parts).strip()
+    # Clean up any trailing separators or garbage
+    value = re.sub(r"\s*[:=\-]\s*$", "", value)
+    return value
 
 
 async def _extract_rows(files: List[UploadFile], fields: str) -> tuple[list[str], list[dict]]:
