@@ -1,6 +1,7 @@
 import io
 import re
 import time
+from difflib import SequenceMatcher
 from typing import List
 
 import fitz  # PyMuPDF
@@ -200,7 +201,7 @@ def clean_ocr_text(text: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODULE 2: Field Normalization & Alias Mapping
+# MODULE 2: Field Normalization, Similarity Helpers & Alias Mapping
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _normalize(s: str) -> str:
@@ -208,6 +209,18 @@ def _normalize(s: str) -> str:
     s = s.lower()
     s = re.sub(r"[.,:;!?()'\"\-/#]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def _strip_all_punct(s: str) -> str:
+    """Remove ALL non-alphanumeric characters and lowercase."""
+    return re.sub(r"[^a-zA-Z0-9]", "", s).lower()
+
+
+def _char_similarity(a: str, b: str) -> float:
+    """Character-level similarity (0.0 to 1.0) using SequenceMatcher."""
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
 
 _ALIASES: dict[str, list[str]] = {
@@ -263,11 +276,22 @@ _ALIASES: dict[str, list[str]] = {
     "employer": ["employer name", "company", "company name", "organization"],
     "occupation": ["designation", "job title", "position", "role"],
     "salary": ["pay", "wage", "compensation", "ctc", "annual salary"],
+    # Driving license specific
+    "s/w/d": ["s w d", "son of", "wife of", "daughter of", "s o", "w o", "d o",
+              "father name", "father s name", "husband name"],
+    "blood group": ["blood grp", "blood type", "bl group", "bl grp"],
+    "date of issue": ["issue date", "issued on", "doi", "dt of issue",
+                      "date of issue"],
+    "date of expiry": ["expiry date", "valid till", "valid until", "doe",
+                       "expires on", "exp date", "validity", "date of expiry"],
+    "authorization to drive": ["auth to drive", "authorized to drive",
+                                "vehicle class", "class of vehicle", "cov",
+                                "category", "categories", "authorization to drive"],
 }
 
 
-def _field_variants(field: str) -> list[str]:
-    """Generate regex patterns for all variants of a user-supplied field name."""
+def _get_all_variants(field: str) -> set[str]:
+    """Get all normalized name variants for a field, including aliases."""
     norm = _normalize(field)
     variants = {norm}
 
@@ -285,7 +309,14 @@ def _field_variants(field: str) -> list[str]:
                 variants.update(all_forms)
                 break
 
+    return variants
+
+
+def _field_variants(field: str) -> list[str]:
+    """Generate regex patterns for all variants of a user-supplied field name."""
+    variants = _get_all_variants(field)
     result = []
+
     for v in sorted(variants, key=len, reverse=True):
         words = v.split()
         parts = []
@@ -296,47 +327,132 @@ def _field_variants(field: str) -> list[str]:
             ocr_word = ocr_word.replace("o", "[o0]").replace("0", "[0o]")
             ocr_word = ocr_word.replace("s", "[s5]").replace("5", "[5s]")
             parts.append(ocr_word + r"[.,:;#]?")
-        pattern = r"[\s\-_]+".join(parts)
+        # Normal variant with flexible separators between words
+        pattern = r"[\s\-_]*".join(parts)
         result.append(pattern)
+
+        # Also add a "joined" variant for OCR word-joining errors
+        # e.g., "authorization to" also matches "authorizationto"
+        if len(words) > 1:
+            joined = "".join(words)
+            ocr_joined = re.escape(joined)
+            ocr_joined = ocr_joined.replace("c", "[ce]").replace("e", "[ec]")
+            ocr_joined = ocr_joined.replace("i", "[il1]").replace("l", "[li1]")
+            ocr_joined = ocr_joined.replace("o", "[o0]").replace("0", "[0o]")
+            ocr_joined = ocr_joined.replace("s", "[s5]").replace("5", "[5s]")
+            result.append(ocr_joined + r"[.,:;#]?")
 
     return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODULE 3: Field Position Detection
+# MODULE 3: Field Position Detection (regex + fuzzy similarity)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _find_field_position(text: str, field: str) -> re.Match | None:
-    """Find where a field label appears in text using fuzzy matching."""
+def _find_field_position(text: str, field: str) -> tuple[int, int, str] | None:
+    """Find where a field label appears in text.
+
+    Returns (start_pos, value_start_pos, matched_keyword) or None.
+    Tries regex patterns first, then falls back to fuzzy similarity scanning.
+    """
     variants = _field_variants(field)
 
+    # Strategy 1: LABEL followed by separator (:, =, -, tab)
     for vp in variants:
-        pattern = rf"(?im)({vp})\s*[:=\-—\t]\s*"
-        m = re.search(pattern, text)
+        m = re.search(rf"(?im)({vp})\s*[:=\-\u2014\t]\s*", text)
         if m:
-            return m
+            return m.start(), m.end(), m.group(1).strip()
 
+    # Strategy 2: LABEL followed by wide whitespace
     for vp in variants:
-        pattern = rf"(?im)^[ \t]*({vp})\s{{2,}}"
-        m = re.search(pattern, text)
+        m = re.search(rf"(?im)^[ \t]*({vp})\s{{2,}}", text)
         if m:
-            return m
+            return m.start(), m.end(), m.group(1).strip()
 
+    # Strategy 3: LABEL at end of line
     for vp in variants:
-        pattern = rf"(?im)({vp})\s*$"
-        m = re.search(pattern, text)
+        m = re.search(rf"(?im)({vp})\s*$", text)
         if m:
-            return m
+            return m.start(), m.end(), m.group(1).strip()
 
+    # Strategy 4: LABEL in text followed by separator or newline
     for vp in variants:
-        pattern = rf"(?i)({vp})"
-        m = re.search(pattern, text)
+        m = re.search(rf"(?i)({vp})", text)
         if m:
             after = text[m.end():m.end() + 10]
-            if re.match(r"\s*[:=\-—\t]", after) or re.match(r"\s*\n", after):
-                return m
+            if re.match(r"\s*[:=\-\u2014\t]", after) or re.match(r"\s*\n", after):
+                return m.start(), m.end(), m.group(1).strip()
 
-    return None
+    # Strategy 5: Fuzzy similarity scan (handles OCR errors like Agaress→Address)
+    return _fuzzy_find_field(text, field)
+
+
+def _fuzzy_find_field(text: str, field: str) -> tuple[int, int, str] | None:
+    """Scan lines for labels with >=70% character similarity to the field name."""
+    all_variants = _get_all_variants(field)
+
+    lines = text.split("\n")
+    best_score = 0.0
+    best_result: tuple[int, int, str] | None = None
+
+    offset = 0
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            offset += len(line) + 1
+            continue
+
+        label = ""
+        value_start_in_line = -1
+
+        # Try colon separator first
+        colon_pos = stripped.find(":")
+        if colon_pos > 0:
+            label = stripped[:colon_pos].strip()
+            # Find position of colon in original line
+            colon_in_line = line.find(":")
+            value_start_in_line = colon_in_line + 1
+            # Skip whitespace after colon
+            while value_start_in_line < len(line) and line[value_start_in_line] in " \t":
+                value_start_in_line += 1
+        else:
+            # Try equals separator
+            eq_pos = stripped.find("=")
+            if eq_pos > 0:
+                label = stripped[:eq_pos].strip()
+                eq_in_line = line.find("=")
+                value_start_in_line = eq_in_line + 1
+                while value_start_in_line < len(line) and line[value_start_in_line] in " \t":
+                    value_start_in_line += 1
+            else:
+                # Try wide space separator
+                sep_m = re.match(r"^(.*?)\s{2,}(.+)$", stripped)
+                if sep_m:
+                    label = sep_m.group(1).strip()
+                    value_start_in_line = line.find(sep_m.group(2))
+
+        if not label or len(label) > 80 or value_start_in_line < 0:
+            offset += len(line) + 1
+            continue
+
+        label_norm = _normalize(label)
+        label_nospace = _strip_all_punct(label)
+
+        for variant in all_variants:
+            variant_nospace = _strip_all_punct(variant)
+
+            sim = max(
+                _char_similarity(label_norm, variant),
+                _char_similarity(label_nospace, variant_nospace),
+            )
+
+            if sim > best_score and sim >= 0.7:
+                best_score = sim
+                best_result = (offset, offset + value_start_in_line, label)
+
+        offset += len(line) + 1
+
+    return best_result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -346,9 +462,9 @@ def _find_field_position(text: str, field: str) -> re.Match | None:
 def _clean_value(value: str) -> str:
     """Clean extracted value: strip leading separators, extra whitespace, etc."""
     # Remove leading colons, dashes, equals, spaces
-    value = re.sub(r"^[\s:=\-—]+", "", value)
+    value = re.sub(r"^[\s:=\-\u2014]+", "", value)
     # Remove trailing separators
-    value = re.sub(r"[\s:=\-—]+$", "", value)
+    value = re.sub(r"[\s:=\-\u2014]+$", "", value)
     # Collapse internal whitespace
     value = re.sub(r"\s+", " ", value).strip()
     return value
@@ -358,13 +474,21 @@ def _clean_value(value: str) -> str:
 # MODULE 5: Multi-line & Full-Block Value Extraction
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _is_kv_line(line: str) -> bool:
+    """Does this line look like a LABEL : VALUE pattern?"""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return bool(re.match(r"^[A-Za-z][A-Za-z\s/.#()&,]{0,60}?\s*:\s*\S", stripped))
+
+
 def _is_field_label(line: str, all_field_patterns: list[str] | None = None) -> bool:
     """Heuristic: does this line look like the start of a new key-value field?"""
     stripped = line.strip()
     if not stripped:
         return False
 
-    if re.match(r"^[A-Za-z][A-Za-z\s./#]{1,50}\s*[:=]\s*\S", stripped):
+    if _is_kv_line(line):
         return True
     if re.match(r"^[A-Z][A-Z\s./#]{1,50}\s*[:=\-]\s*", stripped):
         return True
@@ -401,19 +525,15 @@ def _extract_multiline_value(text: str, start_pos: int,
 
         if not stripped:
             consecutive_empty += 1
-            # Two consecutive empty lines = definite end
             if consecutive_empty >= 2:
                 break
-            # Single empty line: only stop if we already have content
             if value_parts:
-                # Peek ahead — if next non-empty line is a field label, stop
                 found_more = False
                 for j in range(i + 1, min(len(lines), i + 3)):
                     ns = lines[j].strip()
                     if ns:
                         if _is_field_label(ns, all_field_patterns):
                             break
-                        # Non-empty, non-field line after blank = continuation
                         found_more = True
                         break
                 if not found_more:
@@ -422,37 +542,35 @@ def _extract_multiline_value(text: str, start_pos: int,
 
         consecutive_empty = 0
 
-        # Stop if this line is a new field label (only after first value line)
+        # Stop if this line starts a new KV field (only after first value line)
         if value_parts and _is_field_label(stripped, all_field_patterns):
             break
 
         value_parts.append(stripped)
 
+    # Join multi-line values with comma+space
     value = ", ".join(value_parts) if len(value_parts) > 1 else " ".join(value_parts)
     return _clean_value(value)
 
 
 def _extract_full_block(text: str, field: str,
-                        all_field_patterns: list[str] | None = None) -> str:
-    """Full Block extraction: capture everything between this field and the next field."""
-    match = _find_field_position(text, field)
-    if not match:
-        return ""
+                        all_field_patterns: list[str] | None = None) -> tuple[str, str]:
+    """Full Block extraction. Returns (value, matched_keyword)."""
+    result = _find_field_position(text, field)
+    if not result:
+        return "", ""
 
-    after = text[match.end():]
+    _start, end, matched = result
+    after = text[end:]
 
-    # Find where the next field label starts in the remaining text
-    # Build a combined pattern of ALL known field labels in the document
     next_field_pos = len(after)
 
-    # Check for any key-value pattern (Label : or Label =)
     kv_pattern = re.compile(
         r"^[ \t]*[A-Za-z][A-Za-z\s./#]{1,50}\s*[:=]\s*",
         re.MULTILINE
     )
-    # Also check user-provided field patterns
     for m in kv_pattern.finditer(after):
-        if m.start() > 0:  # skip if it starts at position 0 (that's our value)
+        if m.start() > 0:
             next_field_pos = min(next_field_pos, m.start())
             break
 
@@ -463,10 +581,9 @@ def _extract_full_block(text: str, field: str,
                 next_field_pos = min(next_field_pos, pm.start())
 
     block = after[:next_field_pos].strip()
-    # Join lines with commas for multi-line blocks
     lines = [l.strip() for l in block.split("\n") if l.strip()]
     value = ", ".join(lines) if len(lines) > 1 else " ".join(lines)
-    return _clean_value(value)
+    return _clean_value(value), matched
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -535,7 +652,7 @@ def auto_detect_fields(text: str) -> list[dict[str, str]]:
     # Pattern: "Label : Value" or "Label = Value" or "LABEL - Value"
     patterns = [
         re.compile(r"^[ \t]*([A-Za-z][A-Za-z\s./#]{1,50}?)\s*[:=]\s*(.+)$", re.MULTILINE),
-        re.compile(r"^[ \t]*([A-Z][A-Z\s./#]{1,50}?)\s*[-—]\s*(.+)$", re.MULTILINE),
+        re.compile(r"^[ \t]*([A-Z][A-Z\s./#]{1,50}?)\s*[-\u2014]\s*(.+)$", re.MULTILINE),
     ]
 
     for pattern in patterns:
@@ -556,12 +673,88 @@ def auto_detect_fields(text: str) -> list[dict[str, str]]:
             seen_labels.add(norm_label)
 
             # Truncate preview value
-            preview = value[:80] + ("…" if len(value) > 80 else "")
+            preview = value[:80] + ("\u2026" if len(value) > 80 else "")
             detected.append({"field": label, "preview": preview})
 
-    # Sort by position in document (they're already in order from regex)
     # Limit to reasonable number
     return detected[:30]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULE 7.5: KV Format Detection & Extraction
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _is_kv_document(text: str) -> bool:
+    """Check if document primarily uses LABEL : VALUE format."""
+    lines = [l for l in text.split("\n") if l.strip()]
+    if len(lines) < 3:
+        return False
+    kv_count = sum(1 for l in lines if _is_kv_line(l))
+    return kv_count >= 3 and kv_count / len(lines) >= 0.2
+
+
+def _extract_kv_value(text: str, field: str) -> tuple[str, str]:
+    """Extract value from a LABEL : VALUE format document using fuzzy matching.
+
+    Returns (extracted_value, matched_label_in_document).
+    """
+    all_variants = _get_all_variants(field)
+
+    lines = text.split("\n")
+    best_score = 0.0
+    best_label = ""
+    best_line_idx = -1
+
+    for i, line in enumerate(lines):
+        colon_pos = line.find(":")
+        if colon_pos < 1:
+            continue
+        label = line[:colon_pos].strip()
+        if not label:
+            continue
+
+        label_norm = _normalize(label)
+        label_nospace = _strip_all_punct(label)
+
+        for variant in all_variants:
+            variant_nospace = _strip_all_punct(variant)
+
+            # Exact match gets score 1.0
+            if label_norm == variant:
+                score = 1.0
+            else:
+                score = max(
+                    _char_similarity(label_norm, variant),
+                    _char_similarity(label_nospace, variant_nospace),
+                )
+
+            if score > best_score:
+                best_score = score
+                best_label = label
+                best_line_idx = i
+
+    if best_score < 0.7 or best_line_idx < 0:
+        return "", ""
+
+    # Extract value after the colon
+    line = lines[best_line_idx]
+    colon_pos = line.find(":")
+    value_start = line[colon_pos + 1:].strip()
+    value_lines = [value_start] if value_start else []
+
+    # Continue to next lines until we hit another KV line
+    for j in range(best_line_idx + 1, min(len(lines), best_line_idx + 20)):
+        next_line = lines[j].strip()
+        if not next_line:
+            if value_lines:
+                break
+            continue
+        if _is_kv_line(lines[j]):
+            break
+        value_lines.append(next_line)
+
+    value = ", ".join(value_lines) if len(value_lines) > 1 else " ".join(value_lines)
+    return _clean_value(value), best_label
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -570,38 +763,48 @@ def auto_detect_fields(text: str) -> list[dict[str, str]]:
 
 def extract_field_value(text: str, field: str,
                         all_field_patterns: list[str] | None = None,
-                        method: str = "auto") -> str:
+                        method: str = "auto") -> tuple[str, str]:
     """Extract a field value from text.
 
+    Returns (extracted_value, matched_keyword_in_document).
+
     Methods:
-        auto   - Try after-keyword first, then full-block, then table lookup
+        auto   - Try KV format, then after-keyword, then full-block, then table
         block  - Full block extraction (everything until next field)
     """
+    # Strategy 0: KV document format (most reliable for structured docs)
+    if _is_kv_document(text):
+        value, matched = _extract_kv_value(text, field)
+        if value:
+            return value, matched
+
+    # Strategy 1: Block method (if requested)
     if method == "block":
-        value = _extract_full_block(text, field, all_field_patterns)
+        value, matched = _extract_full_block(text, field, all_field_patterns)
         if value:
-            return value
+            return value, matched
 
-    # After-keyword extraction with multi-line support
-    match = _find_field_position(text, field)
-    if match:
-        value = _extract_multiline_value(text, match.end(), all_field_patterns)
+    # Strategy 2: After-keyword extraction with multi-line support
+    result = _find_field_position(text, field)
+    if result:
+        start, end, matched = result
+        value = _extract_multiline_value(text, end, all_field_patterns)
         if value:
-            return value
+            return value, matched
         # If after-keyword found nothing, try full block
-        value = _extract_full_block(text, field, all_field_patterns)
+        value, matched2 = _extract_full_block(text, field, all_field_patterns)
         if value:
-            return value
+            return value, matched2 or matched
 
-    # Fallback: search in detected tables
+    # Strategy 3: Fallback to table lookup
     tables = _extract_table_rows(text)
     norm_field = _normalize(field)
     for table_row in tables:
         for col_name, col_val in table_row.items():
             if _normalize(col_name) == norm_field and col_val.strip():
-                return _clean_value(col_val)
+                return _clean_value(col_val), col_name
 
-    return ""
+    return "", ""
 
 
 async def _read_file_text(file: UploadFile) -> str:
@@ -624,8 +827,11 @@ async def _read_file_text(file: UploadFile) -> str:
 
 
 async def _extract_rows(files: List[UploadFile], fields: str,
-                         method: str = "auto") -> tuple[list[str], list[dict], list[dict]]:
-    """Extract fields from files. Returns (field_list, rows, context_rows)."""
+                         method: str = "auto") -> tuple[list[str], list[dict], list[dict], list[dict]]:
+    """Extract fields from files.
+
+    Returns (field_list, rows, context_rows, matched_keyword_rows).
+    """
     import json
 
     try:
@@ -638,6 +844,7 @@ async def _extract_rows(files: List[UploadFile], fields: str,
 
     rows = []
     context_rows = []
+    matched_keyword_rows = []
     for file in files:
         text = await _read_file_text(file)
 
@@ -647,22 +854,24 @@ async def _extract_rows(files: List[UploadFile], fields: str,
 
         row = {"Filename": file.filename}
         ctx = {"Filename": file.filename}
+        kw = {"Filename": file.filename}
         for field in field_list:
-            value = extract_field_value(text, field, all_patterns, method)
+            value, matched_keyword = extract_field_value(text, field, all_patterns, method)
             row[field] = value
+            kw[field] = matched_keyword if matched_keyword else ""
+
             # Build context: show where the match was found
             if value:
-                match = _find_field_position(text, field)
-                if match:
-                    # Show label + value with surrounding context
-                    start = max(0, match.start() - 10)
-                    # Find end of value in text
-                    val_pos = text.find(value.split(",")[0].strip(), match.end())
+                pos = _find_field_position(text, field)
+                if pos:
+                    pos_start, pos_end, _ = pos
+                    start = max(0, pos_start - 10)
+                    val_pos = text.find(value.split(",")[0].strip(), pos_end)
                     if val_pos >= 0:
                         end = min(len(text), val_pos + len(value) + 20)
                     else:
-                        end = min(len(text), match.end() + len(value) + 40)
-                    snippet = text[start:end].replace("\n", " ↵ ").strip()
+                        end = min(len(text), pos_end + len(value) + 40)
+                    snippet = text[start:end].replace("\n", " \u21b5 ").strip()
                     ctx[field] = snippet
                 else:
                     ctx[field] = ""
@@ -670,8 +879,9 @@ async def _extract_rows(files: List[UploadFile], fields: str,
                 ctx[field] = ""
         rows.append(row)
         context_rows.append(ctx)
+        matched_keyword_rows.append(kw)
 
-    return field_list, rows, context_rows
+    return field_list, rows, context_rows, matched_keyword_rows
 
 
 @app.post("/extract-fields")
@@ -681,8 +891,13 @@ async def extract_fields(
     method: str = Form("auto"),
 ):
     """Extract user-defined fields from multiple PDFs and return JSON preview."""
-    field_list, rows, context_rows = await _extract_rows(files, fields, method)
-    return {"fields": field_list, "rows": rows, "context": context_rows}
+    field_list, rows, context_rows, matched_keyword_rows = await _extract_rows(files, fields, method)
+    return {
+        "fields": field_list,
+        "rows": rows,
+        "context": context_rows,
+        "matched_keywords": matched_keyword_rows,
+    }
 
 
 @app.post("/auto-detect-fields")
@@ -703,7 +918,7 @@ async def extract_fields_xlsx(
     """Extract user-defined fields and return an Excel spreadsheet."""
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    field_list, rows, _ = await _extract_rows(files, fields)
+    field_list, rows, _, _ = await _extract_rows(files, fields)
 
     wb = openpyxl.Workbook()
     ws = wb.active

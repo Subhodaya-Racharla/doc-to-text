@@ -400,6 +400,7 @@ export default function Home() {
   const [ssMethod, setSsMethod] = useState<"auto" | "block">("auto");
   const [ssShowContext, setSsShowContext] = useState(false);
   const [ssDetecting, setSsDetecting] = useState(false);
+  const [ssMatchedKeys, setSsMatchedKeys] = useState<Record<string, string>[] | null>(null);
   const ssInputRef = useRef<HTMLInputElement>(null);
 
   // Download dropdown
@@ -589,6 +590,7 @@ export default function Home() {
       const data = await res.json();
       setSsPreview(data.rows);
       setSsContext(data.context ?? null);
+      setSsMatchedKeys(data.matched_keywords ?? null);
       setSsStatus("success");
     } catch (e: unknown) {
       setSsError(e instanceof Error ? e.message : "Error");
@@ -859,7 +861,7 @@ export default function Home() {
                   )}
                 </button>
                 {ssStatus === "success" && (
-                  <button onClick={() => { setSsStatus("idle"); setSsPreview(null); setSsContext(null); setSsFiles([]); setSsFields([""]); }}
+                  <button onClick={() => { setSsStatus("idle"); setSsPreview(null); setSsContext(null); setSsMatchedKeys(null); setSsFiles([]); setSsFields([""]); }}
                     className={`text-xs font-medium ${dark ? "text-gray-600 hover:text-gray-400" : "text-gray-400 hover:text-gray-600"}`}>&larr; Start over</button>
                 )}
               </div>
@@ -902,9 +904,16 @@ export default function Home() {
                               {headers.map((h) => {
                                 const val = row[h];
                                 const ctx = ssContext?.[ri]?.[h];
+                                const matchedKw = ssMatchedKeys?.[ri]?.[h];
+                                const showHint = matchedKw && h !== "Filename" && val && matchedKw.toLowerCase() !== h.toLowerCase();
                                 return (
                                   <td key={h} className={`px-4 py-3 ${dark ? "text-gray-300" : "text-gray-700"} ${val ? "" : dark ? "text-gray-700 italic" : "text-gray-300 italic"}`}>
                                     <div>{val || "Not found"}</div>
+                                    {showHint && (
+                                      <div className={`mt-1 text-xs italic ${dark ? "text-blue-400/70" : "text-blue-500/70"}`}>
+                                        Matched: &ldquo;{matchedKw}&rdquo;
+                                      </div>
+                                    )}
                                     {ssShowContext && ctx && (
                                       <div className={`mt-1.5 text-xs px-2 py-1.5 rounded-lg font-mono leading-relaxed ${dark ? "bg-gray-900/60 text-gray-500" : "bg-yellow-50 text-gray-500 border border-yellow-100"}`}>
                                         {ctx}
