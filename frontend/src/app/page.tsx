@@ -590,23 +590,15 @@ export default function Home() {
     }
   }
 
-  async function downloadSpreadsheet() {
-    const validFields = ssFields.filter((f) => f.trim());
-    if (!validFields.length || !ssFiles.length) return;
-    try {
-      const fd = new FormData();
-      for (const file of ssFiles) fd.append("files", file);
-      fd.append("fields", JSON.stringify(validFields));
-      const res = await fetch(`${API_BASE}/extract-fields-xlsx`, { method: "POST", body: fd });
-      if (!res.ok) throw new Error("Download failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "extracted_data.xlsx"; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e: unknown) {
-      setSsError(e instanceof Error ? e.message : "Download failed");
-    }
+  function downloadSpreadsheet() {
+    if (!ssPreview || !ssPreview.length) return;
+    const headers = Object.keys(ssPreview[0]);
+    const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const lines = [
+      headers.map(csvEscape).join(","),
+      ...ssPreview.map((row) => headers.map((h) => csvEscape(row[h] ?? "")).join(",")),
+    ];
+    triggerDownload(lines.join("\n"), "extracted_data.csv", "text/csv");
   }
 
   function handlePageDragStart(idx: number) { dragSrcIdxRef.current = idx; setDraggingPageNum(pageOrder[idx]); }
@@ -837,7 +829,7 @@ export default function Home() {
                       <button onClick={downloadSpreadsheet}
                         className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                        Download Excel
+                        Download CSV
                       </button>
                     </div>
                     <div className="overflow-x-auto">
